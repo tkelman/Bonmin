@@ -30,22 +30,20 @@ endif
 IPOPTLIBS = \
 	$(IPOPTOBJDIR)/src/Interfaces/libipopt.la
 
-LIBS += `cat $(IPOPTOBJDIR)/src/Interfaces/ipopt_addlibs_cpp.txt`
+LIBS += `cat $(IPOPTOBJDIR)/src/Interfaces/ipopt_addlibs_cpp.txt` \
+	`cat $(BCPOBJDIR)/bcp_addlibs.txt` \
+	`cat $(CBCOBJDIR)/cbc_addlibs.txt` \
+	`cat $(CGLOBJDIR)/cgl_addlibs.txt` \
+	`cat $(OSIOBJDIR)/osi_addlibs.txt` \
+	`cat $(CLPOBJDIR)/clp_addlibs.txt` \
+	`cat $(COINUTILSOBJDIR)/coinutils_addlibs.txt`
 
 ########################################################################
-#                                bonmin                                #
+#                                bonminbcp                                #
 ########################################################################
 
-bonminbcp_SOURCES = \
-	BB_cut.hpp \
-	BB_cut.cpp \
-	BM.hpp \
-	BM.cpp \
-	BM_tm.cpp \
-	BM_lp.cpp \
-	BM_lp_branch.cpp \
-	BM_pack.cpp \
-	BM_var.hpp
+bonminbcp_SOURCES = BB_cut.hpp BM.hpp \
+	BB_cut.cpp BM.cpp BM_tm.cpp BM_lp.cpp BM_lp_branch.cpp BM_pack.cpp
 
 bonminbcp_DEPENDENCIES = amplsolver.a
 
@@ -57,13 +55,11 @@ AMPL_PATHED_FILES = \
 AMPL_SRC = $(abs_source_dir)/../ThirdParty/ASL/solvers
 
 amplsolver.a:
-	rm -rf solvers ; \
-	mkdir solvers ; \
+	rm -rf solvers
+	mkdir -p solvers ; \
 	cd solvers ; \
-	aslmakeflags=`grep '^ASLMAKEFLAGS' ../../../../ThirdParty/ASL/Makefile | sed -e 's/ASLMAKEFLAGS = //' -e 's/CFLAGS="/CFLAGS="-DNO_FUNCADD /'` ; \
-	files=`cd $(AMPL_SRC); ls *.[chs]* makefile* `; \
-	for f in $$files ; do \
-		$(LN_S) $(AMPL_SRC)/$$f $$f; \
+	for f in $(AMPL_SRC)/*.c* $(AMPL_SRC)/*.h* $(AMPL_SRC)/makefile.u; do \
+		$(LN_S) $$f ; \
 	done ; \
 	for f in $(AMPL_PATHED_FILES); do \
 		rm $$f ; \
@@ -80,12 +76,20 @@ amplsolver.a:
 		sed -e 's/atof/ASLatof/g' -e 's/ASLASLatof/ASLatof/g' $$f.orig > $$f ; \
 		rm $$f.orig ; \
 	done ; \
-	$(MAKE) CC=$(CC) -j 1 CFLAGS="-DNO_FUNCADD `grep '^ASLMAKEFLAGS' ../../../../ThirdParty/ASL/Makefile | sed -e 's/^.*CFLAGS=\"//' -e 's/\"\$//'`" -f makefile.u ; \
+	rm -f aslflags.txt ; \
+	grep ASLMAKEFLAGS ../../../../ThirdParty/ASL/config.log | tail -1 > aslflags.txt ; \
+	cat aslflags.txt ; \
+	eval `sed -e "s/ CFLAGS=\".*\"//" aslflags.txt`; \
+	eval `sed -e "s/.*CFLAGS=\"\(.*\)\".*/CFLAGS=\"-DNO_FUNCADD \1\"/" aslflags.txt` ; \
+	if test x"$$CC" = x; then \
+		CC=cc ; \
+	fi; \
+	$(MAKE) CC="$$CC" $$ASLMAKEFLAGS CFLAGS="$$CFLAGS" -f makefile.u ; \
 	cp amplsolver.a ..
 
 bonminbcp_LDADD = \
 	../../src/Apps/libbonmin.la \
-	../../src/BonminAmplInterface/libamplinterface.la \
+	../../src/Interfaces/Ampl/libamplinterface.la \
 	$(IPOPTOBJDIR)/src/Apps/AmplSolver/libamplinterface.la \
 	$(IPOPTLIBS) \
 	$(LIBCBCCOPY) \
@@ -101,9 +105,10 @@ bonminbcp_LDFLAGS = -rpath $(libdir)
 # Here list all include flags, relative to this "srcdir" directory.  This
 # "cygpath" stuff is necessary to compile with native compilers on Windows
 AM_CPPFLAGS = \
-	-I`$(CYGPATH_W) $(srcdir)/../../src/OaInterface` \
-	-I`$(CYGPATH_W) $(srcdir)/../../src/IpoptInterface` \
-	-I`$(CYGPATH_W) $(srcdir)/../../src/BonminAmplInterface` \
+	-I`$(CYGPATH_W) $(srcdir)/../../src/OaAlgorithms` \
+	-I`$(CYGPATH_W) $(srcdir)/../../src/Interfaces` \
+	-I`$(CYGPATH_W) $(srcdir)/../../src/Interfaces/Ipopt` \
+	-I`$(CYGPATH_W) $(srcdir)/../../src/Interfaces/Ampl` \
 	-I`$(CYGPATH_W) $(srcdir)/../../src/CbcBonmin` \
 	-I`$(CYGPATH_W) $(IPOPTOBJDIR)/inc` \
 	-I`$(CYGPATH_W) $(IPOPTSRCDIR)/src/Common` \
@@ -133,6 +138,6 @@ DEFAULT_INCLUDES = -I. -I`$(CYGPATH_W) $(srcdir)` -I$(top_builddir)/inc
 #                         make distclean stuff                         #
 ########################################################################
 
-CLEANFILES = $(LIBCBCCOPY)
+CLEANFILES = $(LIBCBCCOPY) amplsolver.a
 
 DISTCLEANFILES = 

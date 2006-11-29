@@ -7,15 +7,25 @@
 //
 // Date :  07/01/2005
 
-#include "BonminAmplInterface.hpp"
+#include "BonAmplInterface.hpp"
 #include "OsiClpSolverInterface.hpp"
-#include "TMINLP.hpp"
-#include "AmplTMINLP.hpp"
+#include "BonTMINLP.hpp"
+#include "BonAmplTMINLP.hpp"
 #include "IpIpoptApplication.hpp"
+
+#include "BonIpoptSolver.hpp"
+#include "BonminConfig.h"
+
+#ifdef COIN_HAS_FSQP
+#include "BonFilterSolver.hpp"
+#endif
+#include <cmath>
+
+using namespace Bonmin;
 /** Test function for the Osi interface to Ipopt (or any nlp solver). <br>
     If Solver passes all the test then it should have everything needed to be integrated into bonmin. */
 
-void testGetMethods(IpoptInterface &si)
+void testGetMethods(OsiTMINLPInterface &si)
 {
     CoinRelFltEq eq;// to test equality of doubles    
     std::cout<<"Checking get functions"<<std::endl;
@@ -75,17 +85,17 @@ void testGetMethods(IpoptInterface &si)
       assert(si.isFreeBinary(2)==0);
       si.setColLower(2,0.);
       
-      assert(si.getInfinity()>1e50);
+      //assert(si.getInfinity()>1e50);
       std::cout<<"Test passed"<<std::endl;                  
 }
-void testOptimAndSolutionQuery(IpoptInterface &si)
+void testOptimAndSolutionQuery(OsiTMINLPInterface & si)
 {
     CoinRelFltEq eq(1e-07);// to test equality of doubles    
     std::cout<<"Testing optimization methods and solution query"<<std::endl;
     si.initialSolve();
     
     assert(si.isProvenOptimal());
-    assert(si.nCallOptimizeTNLP()==1);
+//    assert(si.nCallOptimizeTNLP()==1);
     assert(si.getIterationCount()>0);
     // Optimum of the problem is -( 3/2 + sqrt(5)/2)
     // with x = (1/2 + sqrt(5) y[1]=x and y[2] = 1/2 + sqrt(5)/2
@@ -121,7 +131,7 @@ void testOptimAndSolutionQuery(IpoptInterface &si)
 }
 
 ///Test set methods
-void testSetMethods(IpoptInterface &si)
+void testSetMethods(OsiTMINLPInterface &si)
 {
     CoinRelFltEq eq(1e-07);// to test equality of doubles    
     si.setColLower(2,1.);
@@ -147,13 +157,12 @@ void testSetMethods(IpoptInterface &si)
     delete ws;
 }
 
-void testOa(BonminAmplInterface &si)
+void testOa(Bonmin::AmplInterface &si)
 {
         CoinRelFltEq eq(1e-07);// to test equality of doubles    
     OsiClpSolverInterface lp;
     si.extractLinearRelaxation(lp);
     lp.writeMps("toy");
-
      assert(lp.getNumCols()==5);
       assert(lp.getNumRows()==4);
       //Check bounds on columns
@@ -170,12 +179,18 @@ void testOa(BonminAmplInterface &si)
       assert(eq(colUp[3],5.));      
       //Check bounds on rows
       const double * rowLow = lp.getRowLower();
+      std::cout<<rowLow[0]<<"\t"<<lp.getInfinity()<<std::endl;
       assert(rowLow[0]<= -lp.getInfinity());
       assert(rowLow[1]<= -lp.getInfinity());
       assert(rowLow[2]<= -lp.getInfinity());
                   
       const double * rowUp = lp.getRowUpper();
-      assert(eq(rowUp[0], 1./2. + 3./(2 * sqrt(5))));
+      double sqrt5 = sqrt(5);
+      if(!eq(rowUp[0], 1./2. + 3./(2 * sqrt5))){
+	double error = fabs(rowUp[0] - 1./2. - 3./(2 * sqrt5));
+	std::cout<<"Error in OA for rowUp[0]: "
+		 <<error<<std::endl;
+      }
       assert(eq(rowUp[1], 0.));
       assert(eq(rowUp[2], 2.));
       assert(eq(rowUp[3], 0.));
@@ -201,14 +216,18 @@ void testOa(BonminAmplInterface &si)
         for(int j = mat->getVectorStarts()[i] ; j < mat->getVectorStarts()[i] + mat->getVectorLengths()[i] ; j++)
         {
         assert(inds[k]==mat->getIndices()[j]);
-//        std::cout<<vals[k]<<"    "<<mat->getElements()[j]<<"    "<<vals[k]-mat->getElements()[j]<<std::endl;
-        assert(eq(vals[k],mat->getElements()[j]));
+        if(!eq(vals[k],mat->getElements()[j])){
+	double error = fabs(vals[k] - mat->getElements()[j]);
+	std::cout<<"Error in OA for element of constraint matrix "<<k<<": "
+		 <<error<<std::endl;
+	if(error > 1e-06) throw -1;
+      }
           k++;
         }
        }
 }
 
-void testFp(BonminAmplInterface &si)
+void testFp(Bonmin::AmplInterface &si)
 {
         CoinRelFltEq eq(1e-07);// to test equality of doubles
         OsiCuts cuts;
@@ -219,12 +238,13 @@ void testFp(BonminAmplInterface &si)
          std::cout<<si.getColSolution()[1]<<std::endl;
        assert(eq(si.getColSolution()[1],(1./2.)));
 }
-void interfaceTest()
+void interfaceTest(Ipopt::SmartPtr<TNLPSolver> solver)
 {
   /**********************************************************************************/
   /*   Test constructors                                                                                                              */
   /**********************************************************************************/
-  std::cout<<"Test IpoptInterface"<<std::endl;
+  std::cout<<"Test OsiTMINLPInterface with "
+	   <<solver->solverName()<<" solver"<<std::endl;
   // Test usefull constructor
   {
         //read a toy problem and do various tests
@@ -242,12 +262,9 @@ void interfaceTest()
 //            c3: x + y[2] + z <= 2;
         
         //Setup Ipopt should be replaced if solver is changed
-        using namespace Ipopt;
-      SmartPtr<Ipopt::IpoptApplication> app = new Ipopt::IpoptApplication();
        const char * args[3] ={"name","mytoy",NULL}; //Ugly, but I don't know how to do differently
        const char ** argv = args;
-      SmartPtr<Ipopt::TMINLP> ampl_tminlp = new Ipopt::AmplTMINLP(ConstPtr(app->Jnlst()), app->Options(), const_cast<char**&>(argv));
-      IpoptInterface si(ampl_tminlp);
+      AmplInterface si(const_cast<char **&> (argv), solver);
     std::cout<<"---------------------------------------------------------------------------------------------------------------------------------------------------------"
     <<std::endl<<"Testing usefull constructor"<<std::endl
     <<"---------------------------------------------------------------------------------------------------------------------------------------------------------"<<std::endl;
@@ -273,14 +290,11 @@ void interfaceTest()
 //            c3: x + y[2] + z <= 2;
         
         //Setup Ipopt should be replaced if solver is changed
-        using namespace Ipopt;
-      SmartPtr<Ipopt::IpoptApplication> app = new Ipopt::IpoptApplication();
       const char * args[3] ={"name","mytoy",NULL}; //Ugly, but I don't know how to do differently
       const char ** argv = args;
-      SmartPtr<Ipopt::TMINLP> ampl_tminlp = new Ipopt::AmplTMINLP(ConstPtr(app->Jnlst()),  app->Options(), const_cast<char**&>(argv));
-      IpoptInterface si1(ampl_tminlp);
+      AmplInterface si1(const_cast<char **&> (argv), solver);
       
-      IpoptInterface si(si1);
+      OsiTMINLPInterface si(si1);
     std::cout<<"---------------------------------------------------------------------------------------------------------------------------------------------------------"
     <<std::endl<<"Testing copy constructor"<<std::endl
     <<"---------------------------------------------------------------------------------------------------------------------------------------------------------"<<std::endl;
@@ -293,10 +307,9 @@ void interfaceTest()
     // Test outer approximation methods
   {
         //Setup Ipopt should be replaced if solver is changed
-        using namespace Ipopt;
         const char * args[3] ={"name","mytoy",NULL}; //Ugly, but I don't know how to do differently
         const char ** argv = args;
-      BonminAmplInterface si(const_cast<char**&>(argv));
+      Bonmin::AmplInterface si(const_cast<char**&>(argv), solver);
       std::cout<<"---------------------------------------------------------------------------------------------------------------------------------------------------------"
 	       <<std::endl<<"Testing outer approximations related methods"<<std::endl
 	       <<"---------------------------------------------------------------------------------------------------------------------------------------------------------"<<std::endl;
@@ -310,8 +323,8 @@ void interfaceTest()
 //    SmartPtr<Ipopt::IpoptApplication> app = new Ipopt::IpoptApplication();
 //    char * args[3] ={"name","toy3",NULL}; //Ugly, but I don't know how to do differently
 //    char ** argv = args;
-//    SmartPtr<Ipopt::TMINLP> ampl_tminlp = new Ipopt::AmplTMINLP(ConstPtr(app->Jnlst()),  app->Options(), argv);
-//    BonminAmplInterface si(ampl_tminlp);
+//    SmartPtr<TMINLP> ampl_tminlp = new AmplTMINLP(ConstPtr(app->Jnlst()),  app->Options(), argv);
+//    Bonmin::AmplInterface si(ampl_tminlp);
 //    std::cout<<"---------------------------------------------------------------------------------------------------------------------------------------------------------"
 //	     <<std::endl<<"Testing optimization of some distance over feasible set"<<std::endl
 //	     <<"---------------------------------------------------------------------------------------------------------------------------------------------------------"<<std::endl;
@@ -322,6 +335,12 @@ void interfaceTest()
 
 int main()
 {
-    interfaceTest();
-    return 0;
+  Ipopt::SmartPtr<IpoptSolver> ipopt_solver = new IpoptSolver;
+  interfaceTest(GetRawPtr(ipopt_solver));
+
+#ifdef COIN_HAS_FSQP
+  Ipopt::SmartPtr<FilterSolver> filter_solver = new FilterSolver;
+  interfaceTest(GetRawPtr(filter_solver));
+#endif
+  return 0;
 }

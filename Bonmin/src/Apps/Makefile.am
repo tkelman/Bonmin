@@ -25,8 +25,8 @@ nodist_libbonmin_la_SOURCES = CbcCompareUser.cpp CbcBranchUser.cpp
 
 libbonmin_la_LIBADD = \
 	../CbcBonmin/libbonminbb.la \
-	../OaInterface/liboainterface.la \
-	../IpoptInterface/libipoptinterface.la 
+	../OaAlgorithms/liboainterface.la \
+	../Interfaces/libbonmininterfaces.la 
 
 libbonmin_la_LDFLAGS = $(LT_LDFLAGS)
 
@@ -45,20 +45,26 @@ if COIN_HAS_CPX
 	$(CPXLIB)
 endif
 
+if COIN_HAS_FSQP
+  COINLIBS += \
+	$(FSQPLIB)
+endif
+
 IPOPTLIBS = \
 	$(IPOPTOBJDIR)/src/Interfaces/libipopt.la
 
 LIBS += `cat $(IPOPTOBJDIR)/src/Interfaces/ipopt_addlibs_cpp.txt`
+LIBS += `cat $(COINUTILSOBJDIR)/coinutils_addlibs.txt`
 
 ########################################################################
 #                                bonmin                                #
 ########################################################################
 
-bonmin_SOURCES = bonmin.cpp
+bonmin_SOURCES = BonMin.cpp
 
 bonmin_LDADD = \
+	../Interfaces/Ampl/libamplinterface.la\
 	libbonmin.la \
-	../BonminAmplInterface/libamplinterface.la\
 	$(IPOPTOBJDIR)/src/Apps/AmplSolver/libamplinterface.la \
 	$(IPOPTLIBS) \
 	$(ASLLIB) \
@@ -75,8 +81,10 @@ bonmin_LDFLAGS = -rpath $(libdir)
 # "cygpath" stuff is necessary to compile with native compilers on Windows
 AM_CPPFLAGS = \
 	-I`$(CYGPATH_W) $(srcdir)/../OaInterface` \
-	-I`$(CYGPATH_W) $(srcdir)/../IpoptInterface` \
-	-I`$(CYGPATH_W) $(srcdir)/../BonminAmplInterface` \
+	-I`$(CYGPATH_W) $(srcdir)/../Interfaces` \
+	-I`$(CYGPATH_W) $(srcdir)/../Interfaces/Ipopt` \
+	-I`$(CYGPATH_W) $(srcdir)/../Interfaces/Filter` \
+	-I`$(CYGPATH_W) $(srcdir)/../Interfaces/Ampl` \
 	-I`$(CYGPATH_W) $(srcdir)/../CbcBonmin` \
 	-I`$(CYGPATH_W) $(IPOPTOBJDIR)/inc` \
 	-I`$(CYGPATH_W) $(IPOPTSRCDIR)/src/Common` \
@@ -113,11 +121,11 @@ CbcBranchUser.cpp: $(CBCSRCDIR)/examples//CbcBranchUser.cpp
 #                              nodeSolver                              #
 ########################################################################
 
-nodeSolver_SOURCES = nodeSolver.cpp
+nodeSolver_SOURCES = BonNodeSolver.cpp
 
 nodeSolver_LDADD = \
+	../Interfaces/Ampl/libamplinterface.la \
 	libbonmin.la \
-	../BonminAmplInterface/libamplinterface.la \
 	$(IPOPTOBJDIR)/src/Apps/AmplSolver/libamplinterface.la \
 	$(IPOPTLIBS) \
 	$(ASLLIB) \

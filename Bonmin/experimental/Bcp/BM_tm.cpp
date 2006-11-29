@@ -1,4 +1,5 @@
 #include "OsiClpSolverInterface.hpp"
+#include "BonIpoptSolver.hpp"
 #include "BCP_problem_core.hpp"
 #include "BM.hpp"
 
@@ -41,13 +42,13 @@ BM_tm::initialize_core(BCP_vec<BCP_var_core*>& vars,
                        BCP_vec<BCP_cut_core*>& cuts,
                        BCP_lp_relax*& matrix)
 {
-    BonminAmplInterface nlpSolver; 
+    Bonmin::AmplInterface nlpSolver; 
     char* argv_[3];
     char** argv = argv_;
     argv[0] = NULL;
     argv[1] = strdup(par.entry(BM_par::NL_filename).c_str());
     argv[2] = NULL;
-    nlpSolver.readAmplNlFile(argv, 0, 0);
+    nlpSolver.readAmplNlFile(argv, new Bonmin::IpoptSolver,  NULL, NULL);
     free(argv[1]);
   
     nlpSolver.extractInterfaceParams();
@@ -106,14 +107,14 @@ BM_tm::initialize_core(BCP_vec<BCP_var_core*>& vars,
 	matrix = new BCP_lp_relax(true /*column major ordered*/);
 	matrix->copyOf(*clp.getMatrixByCol(), obj, clb, cub, rlb, rub);
     }
+    delete[] obj;
 }
 
 /****************************************************************************/
 void
 BM_tm::create_root(BCP_vec<BCP_var*>& added_vars,
                    BCP_vec<BCP_cut*>& added_cuts,
-                   BCP_user_data*& user_data,
-                   BCP_pricing_status& pricing_status)
+                   BCP_user_data*& user_data)
 {
     BM_node* data = new BM_node;
     data->numNlpFailed_ = 0;
@@ -132,7 +133,8 @@ BM_tm::display_feasible_solution(const BCP_solution* sol)
 
     /* Parse again the input file so that we have a nice and clean ampl
        setup */
-    BonminAmplInterface nlpSolver;  
+    Bonmin::AmplInterface nlpSolver;  
+
     char* argv_[3];
     char** argv = argv_;
     argv[0] = NULL;

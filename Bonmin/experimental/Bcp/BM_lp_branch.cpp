@@ -1,4 +1,5 @@
 #include "CoinHelperFunctions.hpp"
+#include "BCP_lp_node.hpp"
 #include "BM.hpp"
 
 //#############################################################################
@@ -17,7 +18,9 @@ BM_lp::select_branching_candidates(const BCP_lp_result& lpres,
     options->GetNumericValue("integer_tolerance", intTol, "bonmin.");
     options->GetNumericValue("cutoff_decr", cutoffIncr, "bonmin.");
 
-    if (lower_bound_ >= upper_bound() + cutoffIncr) {
+    const double objLimit = upper_bound() + cutoffIncr;
+
+    if (lower_bound_ >= objLimit) {
 	return BCP_DoNotBranch_Fathomed;
     }
 
@@ -27,171 +30,181 @@ BM_lp::select_branching_candidates(const BCP_lp_result& lpres,
 	return BCP_DoNotBranch_Fathomed;
     }
 
-    if (par.entry(BM_par::BranchOnSos) && sos.size() > 0) {
-	double bestval = 2.0;
-	int bestsos = -1;
-	int bestsplit = -1;
-	int bestprio = 0;
-	for (size_t ind = 0; ind < sos.size(); ++ind) {
-	    const BmSosInfo& sosi = *sos[ind];
-	    const int prio = sosi.priority;
-	    const int type = sosi.type;
-	    if ((type == 0 && par.entry(BM_par::BranchOnSos) == 2) ||
-		(type == 1 && par.entry(BM_par::BranchOnSos) == 1))
-		continue;
-	    if (bestsos >= 0 && prio != bestprio)
-		break;
-	    const int first = sosi.first;
-	    const int last = sosi.last;
-	    const int *indices = sosi.indices;
-	    // First count how many nonzeros are there
-	    int cnt = 0;
-	    for (int j = first; j < last; ++j) {
-		const double prim_i = primal_solution_[indices[j]];
-		if (prim_i > intTol && prim_i < 1-intTol) {
-		    ++cnt;
-		}
-	    }
-	    // For type1 there can be at most 1, for type2 at most 2 nonzeros
-	    // Find the next sos if this is satisfied.
-	    if (cnt <= 1+type)
-		continue;
+    OsiBranchingInformation brInfo(&nlp, false);
+    brInfo.cutoff_ = objLimit;
+    brInfo.integerTolerance_ = intTol;
+    brInfo.timeRemaining_ = get_param(BCP_lp_par::MaxRunTime) - CoinCpuTime();
+    brInfo.numberSolutions_ = 0; /*FIXME*/
+    brInfo.numberBranchingSolutions_ = 0; /*FIXME numBranchingSolutions_;*/
+    brInfo.depth_ = current_level();
 
-	    // Find where does the sos goes over 0.5
-	    int half = -10;
-	    double val = 0.0;
-	    double primal = 0.0;
-	    for (half = first; half < last; ++half) {
-		val = primal_solution_[indices[half]];
-		primal += val;
-		if (primal > 0.5) {
-		    break;
-		}
-	    }
-	    /* Now [first,half) is < 0.5 and [first,half] is > 0.5.
-	       If the latter is closer to 0.5 then bump up half by one. */
-	    if (primal - 0.5 < 0.5 - (primal - val)) {
-		++half;
-		val = primal - 0.5;
-	    } else {
-		val = 0.5 - (primal - val);
-	    }
+    BCP_branching_decision brDecision;
+    if (par.entry(BM_par::PureBranchAndBound)) {
+	brDecision = bbBranch(brInfo, cands);
+    } else {
+	brDecision = hybridBranch();
+    }
 
-	    /* Now [first,half) gets as close to 0.5 as possible, and val
-	       contains its distance from 0.5 */
+    return brDecision;
+}
 
-	    /* pick this over the prev best choice only if val is smaller than
-	       the it was for the prev best. */
-	    if (val >= bestval)
-		continue;
+//-----------------------------------------------------------------------------
 
-	    /* The branches will be as follows:
-	       type1 : [first,half) and [half,last)
-	       type2 : [first,half) and (half,last)
-	       So if half==first then it must be incremented,
-	       and also for type 2 if half==last-1 then it must be decremented.
-	    */
-	    if (half == first)
-		++half;
-	    if (type == 1 && half == last-1)
-		--half;
+BCP_branching_decision
+BM_lp::hybridBranch()
+{
+    // FIXME: most of the pureBB stuff should work here.
+    throw BCP_fatal_error("BM_lp: FIXME: make hybrid work...");
+}
 
-	    bestval = val;
-	    bestsos = ind;
-	    bestsplit = half;
-	    bestprio = prio;
+//-----------------------------------------------------------------------------
+
+BCP_branching_decision
+BM_lp::bbBranch(OsiBranchingInformation& brInfo,
+		BCP_vec<BCP_lp_branching_object*>& cands)
+{
+    BCP_branching_decision retCode;
+    OsiBranchingObject* brObj = NULL;
+
+    const int numCols = nlp.getNumCols();
+    double* clb_old = new double[numCols];
+    double* cub_old = new double[numCols];
+    CoinDisjointCopyN(nlp.getColLower(), numCols, clb_old);
+    CoinDisjointCopyN(nlp.getColUpper(), numCols, cub_old);
+
+    OsiChooseVariable* choose = NULL;
+    switch (par.entry(BM_par::BranchingStrategy)) {
+    case BM_OsiChooseVariable:
+	choose = new OsiChooseVariable(&nlp);
+	// choose->setNumberStrong(1);
+	break;
+    case BM_OsiChooseStrong:
+	OsiChooseStrong* strong = new OsiChooseStrong(&nlp);
+	strong->setNumberBeforeTrusted(5); // the default in Cbc
+	choose->setNumberStrong(5); // the default in Cbc
+	/** Pseudo Shadow Price mode
+	    0 - off
+	    1 - use and multiply by strong info
+	    2 - use 
+	*/
+	strong->setShadowPriceMode(0);
+	choose = strong;
+	break;
+    }
+
+    const int brResult = try_to_branch(brInfo, &nlp, choose, brObj, true);
+
+#if 0
+    if (choose->goodSolution()) {
+	/* yipee! a feasible solution! Check that it's really */
+	const double* sol = choose->goodSolution();
+	BM_solution* bmsol = new BM_solution;
+	//Just copy the solution stored in solver to sol
+	double ptol;
+	nlp.getDblParam(OsiPrimalTolerance, ptol);
+	for (int i = 0 ; i < numCols ; i++) {
+	    if (fabs(sol[i]) > ptol)
+		bmsol->add_entry(i, sol[i]); 
 	}
+	bmsol->setObjective(choose->goodObjectiveValue());
+	choose->clearGoodSolution();
+	send_feasible_solution(bmsol);
+	delete bmsol;
+    }
+#endif
+    switch (brResult) {
+    case -2:
+	// when doing strong branching a candidate has proved that the
+	// problem is infeasible
+	retCode = BCP_DoNotBranch_Fathomed;
+	break;
+    case -1:
+	// OsiChooseVariable::chooseVariable() returned 2, 3, or 4
+	if (!brObj) {
+	    // just go back and resolve
+	    retCode = BCP_DoNotBranch;
+	} else {
+	    // otherwise might as well branch. The forced variable is
+	    // unlikely to jump up one more (though who knows...)
+	    retCode = BCP_DoBranch;
+	}
+	break;
+    case 0:
+	if (!brObj) {
+	    // nothing got fixed, yet couldn't find something to branch on
+	    throw BCP_fatal_error("BM: Couldn't branch!\n");
+	}
+	// we've got a branching object
+	retCode = BCP_DoBranch;
+	break;
+    default:
+	throw BCP_fatal_error("\
+BM: BCP_lp_user::try_to_branch returned with unknown return code.\n");
+    }
 
-	if (bestsos >= 0) {
-	    // OK, we can branch on an SOS
-	    // This vector will contain one entry only, but we must pass in a
-	    // vector
-	    BCP_vec<BCP_var*> new_vars;
-	    // This vector contains which vars have their ounds forcibly
-	    // changed. It's going to be the newly added branching var, hence
-	    // it's position is -1
-	    BCP_vec<int> fvp(1, -1);
-	    // This vector contains the new lb/ub pairs for all children. So
-	    // it's going to be {0.0, 0.0, 1.0, 1.0}
-	    BCP_vec<double> fvb(4, 0.0);
-	    fvb[2] = fvb[3] = 1.0;
-	    new_vars.push_back(new BM_branching_var(bestsos, bestsplit));
-	    cands.push_back(new BCP_lp_branching_object(2, // num of children
-							&new_vars,
-							NULL, // no new cuts
-							&fvp,NULL,&fvb,NULL,
-							NULL,NULL,NULL,NULL));
+    bool distributedStrongBranching =
+	(retCode == BCP_DoBranch) && (par.entry(BM_par::FullStrongBranch) > 0);
+
+    if (brResult < 0) {
+	// If there were some fixings (brResult < 0) then propagate them
+	// where needed
+	const double* clb = nlp.getColLower();
+	const double* cub = nlp.getColUpper();
+	BCP_lp_prob* p = getLpProblemPointer();
+	BCP_vec<BCP_var*>& vars = p->node->vars;
+	OsiSolverInterface* lp = p->lp_solver;
+	if (distributedStrongBranching) {
+	    retCode = retCode;
+	}
+	for (int i = 0; i < numCols; ++i) {
+	    if (clb_old[i] != clb[i] || cub_old[i] != cub[i]) {
+		vars[i]->change_bounds(clb[i], cub[i]);
+		lp->setColBounds(i, clb[i], cub[i]);
+	    }
+	}
+    }
+
+    if (retCode == BCP_DoBranch) {
+	// all possibilities are 2-way branches
+	int order[2] = {0, 1};
+	// Now interpret the result (at this point we must have a brObj
+	OsiIntegerBranchingObject* intBrObj =
+	    dynamic_cast<OsiIntegerBranchingObject*>(brObj);
+	if (intBrObj) {
+	    if (intBrObj->firstBranch() == 1) {
+		order[0] = 1;
+		order[1] = 0;
+	    }
+	    BCP_lp_integer_branching_object o(intBrObj);
+	    cands.push_back(new BCP_lp_branching_object(o, order));
 	    if (par.entry(BM_par::PrintBranchingInfo)) {
-		printf("\
-BM_lp: At node %i branching on SOS%i set %i  split at: %i with val: %f\n",
-		       current_index(), sos[bestsos]->type+1,
-		       bestsos, bestsplit, bestval);
-	    }
-	    return BCP_DoBranch;;
-	}
-    }
-
-    /* So we couldn't do an sos branching. If it's not pure B&B then we might
-       as well do the built-in branching */
-    if (! par.entry(BM_par::PureBranchAndBound)) {
-	return BCP_lp_user::select_branching_candidates(lpres, vars, cuts,
-							local_var_pool,
-							local_cut_pool, cands);
-    }
-
-    /* If PURE_BB then we have the NLP optimum in "primal_solution_". 
-       Try to find a good branching candidate there. */
-    const int numVars = vars.size();
-    double* frac = new double[numVars];
-    for (int i = 0; i < numVars; ++i) {
-	if (vars[i]->var_type() == BCP_ContinuousVar) {
-	    frac[i] = 0.0;
-	    continue;
-	}
-	const double psol = CoinMin(CoinMax(vars[i]->lb(),primal_solution_[i]),
-				    vars[i]->ub());
-	const double f = psol - floor(psol);
-	frac[i] = CoinMin(f, 1.0-f);
-    }
-
-    // if (par.entry(BM_par::StrongBranchCandidateMinFrac) > 0) {}
-    
-    int besti = -1;
-    double bestval = -1e200;
-    for (int i = 0; i < numVars; ++i) {
-	if (vars[i]->var_type() == BCP_ContinuousVar)
-	    continue;
-	const double psol = CoinMin(CoinMax(vars[i]->lb(),primal_solution_[i]),
-				    vars[i]->ub());
-	const double frac = psol - floor(psol);
-	const double dist = CoinMin(frac, 1.0-frac);
-	
-	if (dist < intTol)
-	    continue;
-	if (par.entry(BM_par::CombinedDistanceAndPriority)) {
-	    if (dist * branching_priority_[i] > bestval) {
-		bestval = dist * branching_priority_[i];
-		besti = i;
+		printf("BM_lp: branching on variable %i   value: %f\n",
+		       intBrObj->originalObject()->columnNumber(),
+		       intBrObj->value());
 	    }
 	}
-	else {
-	    if (branching_priority_[i] > bestval) {
-		bestval = branching_priority_[i];
-		besti = i;
+	OsiSOSBranchingObject* sosBrObj =
+	    dynamic_cast<OsiSOSBranchingObject*>(brObj);
+	if (sosBrObj) {
+	    if (sosBrObj->firstBranch() == 1) {
+		order[0] = 1;
+		order[1] = 0;
+	    }
+	    BCP_lp_sos_branching_object o(sosBrObj);
+	    cands.push_back(new BCP_lp_branching_object(&nlp, o, order));
+	    if (par.entry(BM_par::PrintBranchingInfo)) {
+		printf("BM_lp: branching on SOS %i   value: %f\n",
+		       sosBrObj->originalObject()->columnNumber(),
+		       sosBrObj->value());
 	    }
 	}
     }
-    if (besti == -1) {
-	return BCP_DoNotBranch_Fathomed;
-    }
-    double psol = CoinMin(CoinMax(vars[besti]->lb(), primal_solution_[besti]),
-			  vars[besti]->ub());
-    if (par.entry(BM_par::PrintBranchingInfo)) {
-	printf("BM_lp: branching on variable %i   value: %f\n", besti, psol);
-    }
-    BCP_vec<int> select_pos(1, besti);
-    append_branching_vars(primal_solution_, vars, select_pos, cands);
-    return BCP_DoBranch;
+
+    delete brObj;
+    delete[] clb_old;
+    delete[] cub_old;
+    delete choose;
+    return retCode;
 }
 
 /****************************************************************************/

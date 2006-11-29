@@ -7,7 +7,6 @@
 // Pierre Bonami, Carnegie Mellon University,
 //
 // Date : 03/15/2006
-
 #include <sstream>
 
 /* To get the cumulative time spent on a processor just use a gawk command
@@ -17,17 +16,7 @@
    gawk -e 'BEGIN {t=0} /^BCP_lp: Time spent in this node:/ {t+=$7} END {print t}' outfile
 */
 
-#include "CoinHelperFunctions.hpp"
-#include "BonminAmplInterface.hpp"
-#include "TMINLP.hpp"
-#include "OsiClpSolverInterface.hpp"
-#include "BCP_parameters.hpp"
-#include "BCP_lp.hpp"
 #include "BM.hpp"
-#include "BB_cut.hpp"
-#include "CoinDistance.hpp"
-#include "BCP_lp_node.hpp"
-#include "BCP_tm.hpp"
 
 using namespace std;
 
@@ -44,8 +33,8 @@ int main(int argc, char* argv[])
 template <>
 void BCP_parameter_set<BM_par>::create_keyword_list() {
     // Create the list of keywords for parameter file reading
-    keys.push_back(make_pair(BCP_string("BranchOnSos"),
-			     BCP_parameter(BCP_CharPar, BranchOnSos)));
+    keys.push_back(make_pair(BCP_string("BranchingStrategy"),
+			     BCP_parameter(BCP_IntPar, BranchingStrategy)));
     keys.push_back(make_pair(BCP_string("PureBranchAndBound"),
 			     BCP_parameter(BCP_CharPar, PureBranchAndBound)));
     keys.push_back(make_pair(BCP_string("PrintBranchingInfo"),
@@ -61,6 +50,8 @@ void BCP_parameter_set<BM_par>::create_keyword_list() {
 					   VarWithLowPriorityMoreImportant)));
     keys.push_back(make_pair(BCP_string("NumNlpFailureMax"),
 			     BCP_parameter(BCP_IntPar, NumNlpFailureMax)));
+    keys.push_back(make_pair(BCP_string("WarmStartStrategy"),
+			     BCP_parameter(BCP_IntPar, WarmStartStrategy)));
     keys.push_back(make_pair(BCP_string("NL_filename"),
 			     BCP_parameter(BCP_StringPar, NL_filename)));
     keys.push_back(make_pair(BCP_string("IpoptParamfile"),
@@ -71,14 +62,14 @@ void BCP_parameter_set<BM_par>::create_keyword_list() {
 
 template <>
 void BCP_parameter_set<BM_par>::set_default_entries() {
-    set_entry(BranchOnSos, true);
+    set_entry(BranchingStrategy, BM_OsiChooseStrong);
     set_entry(PureBranchAndBound, false);
     set_entry(PrintBranchingInfo, true);
     set_entry(CombinedDistanceAndPriority, true);
     set_entry(SosWithLowPriorityMoreImportant, true);
-    set_entry(SosWithLowPriorityMoreImportant, true);
     set_entry(VarWithLowPriorityMoreImportant, true);
     set_entry(NumNlpFailureMax, 5);
+    set_entry(WarmStartStrategy, WarmStartFromRoot);
     set_entry(NL_filename, "");
     set_entry(IpoptParamfile, "");
 }
@@ -107,11 +98,17 @@ BM_init::tm_init(BCP_tm_prob& p,
 	tm->par.read_from_arglist(argnum, arglist);
     }
 
+    if (! p.param(BCP_tm_par::MessagePassingIsSerial) &&
+	tm->par.entry(BM_par::PureBranchAndBound) &&
+	tm->par.entry(BM_par::WarmStartStrategy) == WarmStartFromParent) {
+	printf("\
+BM: WarmStartFromParent is not supported for pure B&B in parallel env.\n");
+	printf("\
+BM: Switching to WarmStartFromRoot.\n");
+	tm->par.set_entry(BM_par::WarmStartStrategy, WarmStartFromRoot);
+    }
+
     tm->readIpopt();
 
     return tm;
 }
-
-//#############################################################################
-
-BCP_MemPool BM_branching_var::memPool(sizeof(BM_branching_var));

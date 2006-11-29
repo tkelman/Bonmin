@@ -17,7 +17,7 @@
   \end{itemize}
  The valid range for this integer option is
  $${\tt 0} \le \hbox{\tt bb\_log\_level } \le {\tt 3}$$
-and its default value is {\tt 1}.
+and its default value is {\tt 3}.
 
 
 \paragraph{bb\_log\_interval} Interval at which node level output is printed.
@@ -182,7 +182,7 @@ Choose the maximum number of variables considered for strong branching.
  Set the number of variables on which to do strong
 branching. The valid range for this integer option is
 $${\tt 0} \le \hbox{\tt number\_strong\_branch } <  \infty$$
-and its default value is ${\tt 20}$.
+and its default value is ${\tt 0}$.
 
 
 \paragraph{number\_before\_trust}
@@ -191,7 +191,7 @@ be believed in dynamic strong branching.
 
  A value of 0 disables dynamic strong branching. The valid range for this integer option is
 $${\tt 0} \le \hbox{\tt number\_before\_trust } <  \infty$$
-and its default value is ${\tt 8}$.
+and its default value is ${\tt 0}$.
 
 
 \paragraph{time\_limit}
@@ -217,25 +217,9 @@ Set integer tolerance.
 considered integer.
 The valid range for this real option is
 $${\tt 0} <  \hbox{\tt integer\_tolerance } <  {\tt 0.5}$$
-and its default value is ${\tt 10^{-6}}$.
+and its default value is ${\tt 10^{-06}}$.
 
 
-\paragraph{warm\_start}
-Select the warm start method. Possible values:
-\begin{itemize}
- \item {\tt none}: no warm start,
-\item {\tt optimum}: warm start with direct parent optimum",
-\item {\tt interior\_point}: Warm start with an interior point of direct parent".
-\end{itemize}
-The default value is {\tt optimum}.
-
-\paragraph{sos\_constraints}
-Wether or not to activate SOS constraints branching. Possible values are
-\begin{itemize}
- \item {\tt enable},
-\item {\tt disable}.
-\end{itemize}
-The default value is {\tt enable}.
 
 \subsection{\Bonmin\ options for robustness}
 
@@ -252,7 +236,7 @@ at such a randomly generated point (if \Bonmin\  finds that this is the case,
 it will give up random point generation).
 The valid range for this real option is
 $${\tt 0} <  \hbox{\tt max\_random\_point\_radius } <  \infty$$
-and its default value is ${\tt 10^{5}}$.
+and its default value is ${\tt 10^{+08}}$.
 
 
 \paragraph{max\_consecutive\_failures}
@@ -329,7 +313,7 @@ Number $k$ of trials to solve the root node with different starting points.
  The algorithm solves the root node with $k$
 random starting points and keeps the best
 local optimum found. The valid range for this integer option is
-$${\tt 0} \le \hbox{\tt num\_resolve\_at\_root } <  \infty $$
+$${\tt 0} \le \hbox{\tt num\_solve\_at\_root } <  \infty $$
 and its default value is {\tt 0}.
 
 
@@ -339,7 +323,7 @@ Number $k$ of tries to solve a node (other than the root) of the tree with diffe
  The algorithm solves all the nodes with $k$
 different random starting points and keeps
 the best local optimum found. The valid range for this integer option is
-$${\tt 0} \le \hbox{\tt num\_resolve\_at\_node } <  \infty$$
+$${\tt 0} \le \hbox{\tt num\_solve\_at\_node } <  \infty$$
 and its default value is {\tt 0}.
 
 
@@ -414,4 +398,5 @@ enough are generated at the root node,
 \end{itemize}
  The valid range for this integer option is
 $${\tt -100} \le k <  \infty$$
-and its default value is ${\tt -5}$.
+and its default value is ${\tt -5}$ (excepted for probing
+cuts for which default is 0).

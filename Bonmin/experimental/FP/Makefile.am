@@ -11,9 +11,7 @@ AUTOMAKE_OPTIONS = foreign
 # What is done in this directory:
 
 
-if COIN_HAS_CPX
   bin_PROGRAMS = oa_fp
-endif
 
 
 COINLIBS = \
@@ -30,6 +28,9 @@ if COIN_HAS_CPX
 	$(COINUTILSOBJDIR)/src/libCoinUtils.la \
 	$(CPXLIB)
 endif
+if COIN_HAS_FSQP
+COINLIBS += $(FSQPLIB)
+endif
 
 IPOPTLIBS = \
 	$(IPOPTOBJDIR)/src/Interfaces/libipopt.la
@@ -40,9 +41,10 @@ LIBS += `cat $(IPOPTOBJDIR)/src/Interfaces/ipopt_addlibs_cpp.txt`
 # Here list all include flags, relative to this "srcdir" directory.  This
 # "cygpath" stuff is necessary to compile with native compilers on Windows
 AM_CPPFLAGS = \
-	-I`$(CYGPATH_W) $(srcdir)/../../src/OaInterface` \
-	-I`$(CYGPATH_W) $(srcdir)/../../src/IpoptInterface` \
-	-I`$(CYGPATH_W) $(srcdir)/../../src/BonminAmplInterface` \
+	-I`$(CYGPATH_W) $(srcdir)/../../src/OaAlgorithms` \
+	-I`$(CYGPATH_W) $(srcdir)/../../src/Interfaces` \
+	-I`$(CYGPATH_W) $(srcdir)/../../src/Interfaces/Ipopt` \
+	-I`$(CYGPATH_W) $(srcdir)/../../src/Interfaces/Ampl` \
 	-I`$(CYGPATH_W) $(srcdir)/../../src/CbcBonmin` \
 	-I`$(CYGPATH_W) $(IPOPTOBJDIR)/inc` \
 	-I`$(CYGPATH_W) $(IPOPTSRCDIR)/src/Common` \
@@ -95,8 +97,8 @@ oa_fp_SOURCES = OAFeasibilityPump.cpp FP.cpp FP.hpp
 
 oa_fp_LDADD = \
         ../../src/Apps/libbonmin.la \
-	../../src/BonminAmplInterface/libamplinterface.la\
-	$(IPOPTOBJDIR)/src/Apps/AmplSolver/libamplinterface.la \
+	../../src/Interfaces/Ampl/libamplinterface.la \
+        $(IPOPTOBJDIR)/src/Apps/AmplSolver/libamplinterface.la \
 	$(IPOPTLIBS) \
 	$(ASLLIB) \
 	$(LIBCBCCOPY) \

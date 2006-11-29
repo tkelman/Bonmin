@@ -92,9 +92,8 @@ RECURSIVE_TARGETS = all-recursive check-recursive dvi-recursive \
 	uninstall-recursive
 ETAGS = etags
 CTAGS = ctags
-DIST_SUBDIRS = src/IpoptInterface src/BonminAmplInterface \
-	src/OaInterface src/CbcBonmin src/Apps experimental/FP \
-	experimental/Bcp test
+DIST_SUBDIRS = src/Interfaces src/OaAlgorithms src/CbcBonmin src/Apps \
+	experimental/FP experimental/Bcp test
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 distdir = $(PACKAGE)-$(VERSION)
 top_distdir = $(distdir)
@@ -160,6 +159,8 @@ COIN_HAS_DYLP_FALSE = @COIN_HAS_DYLP_FALSE@
 COIN_HAS_DYLP_TRUE = @COIN_HAS_DYLP_TRUE@
 COIN_HAS_FMP_FALSE = @COIN_HAS_FMP_FALSE@
 COIN_HAS_FMP_TRUE = @COIN_HAS_FMP_TRUE@
+COIN_HAS_FSQP_FALSE = @COIN_HAS_FSQP_FALSE@
+COIN_HAS_FSQP_TRUE = @COIN_HAS_FSQP_TRUE@
 COIN_HAS_GLPK_FALSE = @COIN_HAS_GLPK_FALSE@
 COIN_HAS_GLPK_TRUE = @COIN_HAS_GLPK_TRUE@
 COIN_HAS_IPOPT_FALSE = @COIN_HAS_IPOPT_FALSE@
@@ -205,6 +206,8 @@ FADDLIBS = @FADDLIBS@
 FFLAGS = @FFLAGS@
 FMPINCDIR = @FMPINCDIR@
 FMPLIB = @FMPLIB@
+FSQPINCDIR = @FSQPINCDIR@
+FSQPLIB = @FSQPLIB@
 GLPKINCDIR = @GLPKINCDIR@
 GLPKLIB = @GLPKLIB@
 HAVE_EXTERNALS_FALSE = @HAVE_EXTERNALS_FALSE@
@@ -258,8 +261,6 @@ SYMSRCDIR = @SYMSRCDIR@
 VERSION = @VERSION@
 VOLOBJDIR = @VOLOBJDIR@
 VOLSRCDIR = @VOLSRCDIR@
-VPATH_CONFIG_FALSE = @VPATH_CONFIG_FALSE@
-VPATH_CONFIG_TRUE = @VPATH_CONFIG_TRUE@
 VPATH_DISTCLEANFILES = @VPATH_DISTCLEANFILES@
 XPRINCDIR = @XPRINCDIR@
 XPRLIB = @XPRLIB@
@@ -320,9 +321,8 @@ AUTOMAKE_OPTIONS = foreign
 ########################################################################
 
 # Here list all subdirectories into which to recurse
-SUBDIRS = src/IpoptInterface src/BonminAmplInterface src/OaInterface \
-	src/CbcBonmin src/Apps $(am__append_1) $(am__append_2) \
-	$(am__append_3)
+SUBDIRS = src/Interfaces src/OaAlgorithms src/CbcBonmin src/Apps \
+	$(am__append_1) $(am__append_2) $(am__append_3)
 
 ########################################################################
 #             Additional files to be included in tarball               #
@@ -786,12 +786,15 @@ uninstall-info: uninstall-info-recursive
 #                           Extra Targets                              #
 ########################################################################
 
-.PHONY: doc test unitTest userman astyle
+.PHONY: doc test unitTest userman astyle nodeSolver
 
 test: unitTest
 
 unitTest: all
 	cd test; make test
+
+nodeSolver: all
+	cd src/Apps; make nodeSolver
 
 doc:	userman
 
@@ -800,7 +803,6 @@ userman: $(top_srcdir)/doc/BONMIN_UsersManual.tex
 
 astyle:
 	cd src/IpoptInterface; $(MAKE) astyle
-	cd src/BonminAmplInterface; $(MAKE) astyle
 	cd src/CbcBonmin; $(MAKE) astyle
 	cd src/OaInterface; $(MAKE) astyle
 	cd src/Apps; $(MAKE) astyle

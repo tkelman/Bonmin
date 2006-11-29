@@ -14,7 +14,6 @@
 #include "BCP_tm_user.hpp"
 #include "BCP_lp_user.hpp"
 
-#include "BM_var.hpp"
 #include "BB_cut.hpp"
 
 //#############################################################################
@@ -40,11 +39,21 @@ public:
 
 //#############################################################################
     
+enum BM_WarmStartStrategy {
+    WarmStartNone,
+    WarmStartFromRoot,
+    WarmStartFromParent
+};
+
+enum BM_BranchingStrategy {
+    BM_OsiChooseVariable,
+    BM_OsiChooseStrong
+};
+
 class BM_par {
 public:
     enum chr_params {
         //
-	BranchOnSos,
         CombinedDistanceAndPriority,
         PureBranchAndBound,
 	PrintBranchingInfo,
@@ -54,7 +63,10 @@ public:
     };
     enum int_params {
         //
+	BranchingStrategy,
+	FullStrongBranch,
         NumNlpFailureMax,
+	WarmStartStrategy,
         end_of_int_params
     };
     enum dbl_params {
@@ -99,13 +111,6 @@ public:
     //@{
     virtual void pack_module_data(BCP_buffer& buf, BCP_process_t ptype);
 
-    virtual void pack_var_algo(const BCP_var_algo* var, BCP_buffer& buf) {
-	BM_pack_var(var, buf);
-    }
-    virtual BCP_var_algo* unpack_var_algo(BCP_buffer& buf) {
-	return BM_unpack_var(buf);
-    }
-
     virtual void pack_cut_algo(const BCP_cut_algo* cut, BCP_buffer& buf) {
 	BB_pack_cut(cut, buf);
     }
@@ -136,8 +141,7 @@ public:
     virtual void
     create_root(BCP_vec<BCP_var*>& added_vars,
 		BCP_vec<BCP_cut*>& added_cuts,
-		BCP_user_data*& user_data,
-		BCP_pricing_status& pricing_status);
+		BCP_user_data*& user_data);
 
     /// Print a feasible solution
     virtual void display_feasible_solution(const BCP_solution* sol);
@@ -151,33 +155,24 @@ public:
 #include <OsiAuxInfo.hpp>
 #include <OsiCuts.hpp>
 #include "BCP_lp_user.hpp"
-#include "IpCbcOACutGenerator2.hpp"
-#include "BonminAmplInterface.hpp"
+#include "BonOACutGenerator2.hpp"
+#include "BonAmplInterface.hpp"
+#include "BonTMINLP.hpp"
+
 class BM_lp : public BCP_lp_user
 {
-    struct BmSosInfo {
-	int length;
-	int type; // 0: type 1  ---- 1: type 2
-	int priority;
-	int *indices;
-	double *weights;
-	int first;
-	int last;
-	BmSosInfo(const TMINLP::SosInfo * sosinfo, int i);
-	~BmSosInfo() {
-	    delete[] indices;
-	    delete[] weights;
-	}
-    };
-    std::vector<BmSosInfo*> sos;
-    void setSosFrom(const TMINLP::SosInfo * sosinfo);
-		
     BCP_string ipopt_file_content;
     BCP_string nl_file_content;
     BCP_parameter_set<BM_par> par;
 
     OsiBabSolver babSolver_;
-    BonminAmplInterface nlp;
+    Bonmin::AmplInterface nlp;
+    CoinWarmStart* ws;
+
+    /* FIXME: gross cheating. works only for serial mode. Store the warmstart
+       informations in the lp process, do not send them over in user data or
+       anywhere. MUST be fixed. The map is indexed by the node index. */
+    std::map<int, CoinWarmStart*> warmStart;
 
     double lower_bound_;
     double* primal_solution_;
@@ -188,12 +183,7 @@ class BM_lp : public BCP_lp_user
 	difficult. */
     int numNlpFailed_;
 
-    /** If pure branch and bound is done then for each fractional variable
-	that ought to be integer we multiply it's distance from integrality
-	with it's priority and choose the var with the highest value */
-    double* branching_priority_;
-
-    IpCbcOACutGenerator2* feasChecker_;
+    Bonmin::OACutGenerator2* feasChecker_;
     OsiCuts cuts_;
 
 public:
@@ -206,13 +196,6 @@ public:
 
     virtual void
     unpack_module_data(BCP_buffer& buf);
-
-    virtual void pack_var_algo(const BCP_var_algo* var, BCP_buffer& buf) {
-	BM_pack_var(var, buf);
-    }
-    virtual BCP_var_algo* unpack_var_algo(BCP_buffer& buf) {
-	return BM_unpack_var(buf);
-    }
 
     virtual void pack_cut_algo(const BCP_cut_algo* cut, BCP_buffer& buf) {
 	BB_pack_cut(cut, buf);
@@ -252,12 +235,6 @@ public:
 		 // things that the user can use for lifting cuts if allowed
 		 const BCP_lp_result& lpres,
 		 BCP_object_origin origin, bool allow_multiple);
-    virtual void
-    vars_to_cols(const BCP_vec<BCP_cut*>& cuts,
-		 BCP_vec<BCP_var*>& vars,
-		 BCP_vec<BCP_col*>& cols,
-		 const BCP_lp_result& lpres,
-		 BCP_object_origin origin, bool allow_multiple);
     virtual double
     compute_lower_bound(const double old_lower_bound,
 			const BCP_lp_result& lpres,
@@ -281,6 +258,10 @@ public:
 				const BCP_lp_var_pool& local_var_pool,
 				const BCP_lp_cut_pool& local_cut_pool,
 				BCP_vec<BCP_lp_branching_object*>& cans);
+
+    BCP_branching_decision bbBranch(OsiBranchingInformation& brInfo,
+				    BCP_vec<BCP_lp_branching_object*>& cands);
+    BCP_branching_decision hybridBranch();
 
     virtual void
     set_user_data_for_children(BCP_presolved_lp_brobj* best, 

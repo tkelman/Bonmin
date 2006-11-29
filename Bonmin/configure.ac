@@ -22,7 +22,7 @@ under the Common Public License.])
 
 # List one file in the package so that the configure script can test
 # whether the package is actually there
-AC_CONFIG_SRCDIR(src/CbcBonmin/CbcBonmin.hpp)
+AC_CONFIG_SRCDIR(src/CbcBonmin/BonCbc.hpp)
 
 # Where should everything be installed by default?  Here, we want it
 # to be installed directly in 'bin', 'lib', 'include' subdirectories
@@ -45,11 +45,6 @@ AC_COIN_PROJECTDIR_INIT
 
 # Check if user wants to produce debugging code
 AC_COIN_DEBUG_COMPILE
-
-# on blue gene, we need to define -DBLUE_GENE_XLC for the COIN headers
-if test x"$enable_bg" = xyes; then
-  ADD_CXXFLAGS="$ADD_CXXFLAGS -DBLUE_GENE_XLC"
-fi
 
 # Get the name of the C++ compiler and appropriate compiler options
 AC_COIN_PROG_CXX
@@ -84,6 +79,7 @@ AC_COIN_HAS_USER_LIBRARY([Mosek],[MSK],[mosekdl.h],[MSK_openmosek])
 AC_COIN_HAS_USER_LIBRARY([Osl],[OSL],[ekk_c_api.h],[ekk_simplex])
 AC_COIN_HAS_USER_LIBRARY([Soplex],[SPX],[spxsolver.h]) # ToDo
 AC_COIN_HAS_USER_LIBRARY([Xpress],[XPR],[xprs.h],[XPRSsetintcontrol])
+AC_COIN_HAS_USER_LIBRARY([filterSqp],[FSQP]) #ToDo
 
 #############################################################################
 #                       Other third party software                          #
@@ -110,11 +106,8 @@ AC_SUBST(ASTYLEFLAGS)
 #                            Stuff for Examples                             #
 #############################################################################
 
-#AC_COIN_VPATH_LINK(test/bonmin.opt)
-#AC_COIN_VPATH_LINK(test/mytoy.nl)
-# FIXME
-AC_COIN_VPATH_LINK
-AM_CONDITIONAL(VPATH_CONFIG, test $coin_vpath_config = yes)
+AC_COIN_VPATH_LINK(test/bonmin.opt)
+AC_COIN_VPATH_LINK(test/mytoy.nl)
 AC_CONFIG_LINKS([test/MyBonmin.cpp:examples/CppExample/MyBonmin.cpp
                  test/MyTMINLP.cpp:examples/CppExample/MyTMINLP.cpp
                  test/MyTMINLP.hpp:examples/CppExample/MyTMINLP.hpp])
@@ -127,9 +120,11 @@ AC_CONFIG_FILES([Makefile
                  src/Apps/Makefile
                  experimental/Bcp/Makefile
                  src/CbcBonmin/Makefile
-                 src/IpoptInterface/Makefile
-                 src/BonminAmplInterface/Makefile
-                 src/OaInterface/Makefile
+                 src/Interfaces/Makefile
+                 src/Interfaces/Ipopt/Makefile
+                 src/Interfaces/Filter/Makefile
+                 src/Interfaces/Ampl/Makefile
+                 src/OaAlgorithms/Makefile
                  experimental/FP/Makefile
                  test/Makefile
                  examples/CppExample/Makefile])

@@ -1,13 +1,14 @@
 #include "OsiClpSolverInterface.hpp"
 #include "BM.hpp"
+#include "BCP_lp_node.hpp"
 
 //#############################################################################
 
 BM_lp::BM_lp() :
     BCP_lp_user(),
-    sos(),
     babSolver_(3),
     nlp(),
+    ws(NULL),
     feasChecker_(NULL),
     in_strong(0)
 {
@@ -19,11 +20,13 @@ BM_lp::BM_lp() :
 
 BM_lp::~BM_lp()
 {
+    delete ws;
     delete feasChecker_;
     delete[] primal_solution_;
-    delete[] branching_priority_;
-    for (int i = sos.size() - 1; i >= 0; --i) {
-	delete sos[i];
+    /* FIXME: CHEATING */
+    for (std::map<int, CoinWarmStart*>::iterator it = warmStart.begin();
+	 it != warmStart.end(); ++it) {
+	delete it->second;
     }
 }
 
@@ -38,6 +41,7 @@ BM_lp::initialize_solver_interface()
     clp->setAuxiliaryInfo(&babSolver);
     clp->messageHandler()->setLogLevel(0);
     setOsiBabSolver(dynamic_cast<OsiBabSolver *>(clp->getAuxiliaryInfo()));
+
     return clp;
 }
 
@@ -56,47 +60,27 @@ BM_lp::initialize_new_search_tree_node(const BCP_vec<BCP_var*>& vars,
     int i;
     // First copy the bounds into nlp. That way all the branching decisions
     // will be transferred over.
-    for (i = sos.size() - 1; i >= 0; --i) {
-	sos[i]->first = 0;
-	sos[i]->last = sos[i]->length;
-    }
     OsiSolverInterface * osi = getLpProblemPointer()->lp_solver;
-    const int numCols = osi->getNumCols();
-    const double* clb = osi->getColLower();
-    const double* cub = osi->getColUpper();
-    for (i = 0; i < numCols; ++i) {
-	const BCP_var_core* v =
-	    dynamic_cast<const BCP_var_core*>(vars[i]);
-	if (v) {
-	    nlp.setColLower(i, clb[i]);
-	    nlp.setColUpper(i, cub[i]);
-	    continue;
+    nlp.setColLower(osi->getColLower());
+    nlp.setColUpper(osi->getColUpper());
+
+    // Carry the changes over to the object lists in nlp
+    const int numObj = nlp.numberObjects();
+    OsiObject** nlpObj = nlp.objects();
+    for (i = 0; i < numObj; ++i) {
+	OsiSimpleInteger* io = dynamic_cast<OsiSimpleInteger*>(nlpObj[i]);
+	if (io) {
+	    io->resetBounds(&nlp);
+	} else {
+	    // The rest is OsiSOS where we don't need to do anything
+	    break;
 	}
-	const BM_branching_var* bv =
-	    dynamic_cast<const BM_branching_var*>(vars[i]);
-	if (bv) {
-	    const int ind = bv->sos_index;
-	    const int split = bv->split;
-	    const char type = sos[ind]->type;
-	    const int *indices = sos[ind]->indices;
-	    if (bv->ub() == 0.0) {
-		const int last = sos[ind]->last;
-		for (int j = split + type; j < last; ++j) {
-		    nlp.setColLower(indices[j], 0.0);
-		    nlp.setColUpper(indices[j], 0.0);
-		}
-		sos[ind]->last = split + type;
-	    } else {
-		const int first = sos[ind]->first;
-		for (int j = first; j < split; ++j) {
-		    nlp.setColLower(indices[j], 0.0);
-		    nlp.setColUpper(indices[j], 0.0);
-		}
-		sos[ind]->first = split;
-	    }
-	    continue;
-	}
-	throw BCP_fatal_error("BM_lp: unrecognized variable type\n");
+    }
+
+    // copy over the OsiObjects from the nlp solver if the lp solver is to be
+    // used at all (i.e., not pure B&B)
+    if (! par.entry(BM_par::PureBranchAndBound)) {
+	osi->addObjects(nlp.numberObjects(), nlp.objects());
     }
 
     in_strong = 0;
@@ -133,23 +117,58 @@ BM_lp::test_feasibility(const BCP_lp_result& lp_result,
 	   feasible (or along the NLP optimization we have blundered into
 	   a feas sol) then create "sol"
 	*/
-	nlp.initialSolve();
+	switch (par.entry(BM_par::WarmStartStrategy)) {
+	case WarmStartNone:
+	    nlp.initialSolve();
+	    break;
+	case WarmStartFromRoot:
+	    nlp.setWarmStart(ws);
+	    nlp.resolve();
+	    break;
+	case WarmStartFromParent:
+	    /* FIXME: CHEAT! this works only in serial mode! */
+	    {
+		const int ind = current_index();
+		const int parentind =
+		    getLpProblemPointer()->parent->index;
+		std::map<int, CoinWarmStart*>::iterator it =
+		    warmStart.find(parentind);
+		nlp.setWarmStart(it->second);
+		nlp.resolve();
+		warmStart[ind] = nlp.getWarmStart();
+		bool sibling_seen =  ((ind & 1) == 0) ?
+		    warmStart.find(ind-1) != warmStart.end() :
+		    warmStart.find(ind+1) != warmStart.end() ;
+		if (sibling_seen) {
+		    delete it->second;
+		    warmStart.erase(it);
+		}
+	    }
+	    break;
+	}
+
+	const int numCols = nlp.getNumCols();
+	const double* colsol = nlp.getColSolution();
 	if (nlp.isProvenOptimal()) {
-	    const int numCols = nlp.getNumCols();
+	    int i;
+	    const double* clb = nlp.getColLower();
+	    const double* cub = nlp.getColUpper();
+	    // Make sure we are within bounds (get rid of rounding problems)
+	    for (i = 0; i < numCols; ++i) {
+		primal_solution_[i] =
+		    CoinMin(CoinMax(clb[i], colsol[i]), cub[i]);
+	    }
+	    
 	    lower_bound_ = nlp.getObjValue();
-	    CoinDisjointCopyN(nlp.getColSolution(), numCols, primal_solution_);
 	    numNlpFailed_ = 0;
 	    Ipopt::SmartPtr<Ipopt::OptionsList> options = nlp.retrieve_options();
 	    double intTol;
 	    options->GetNumericValue("integer_tolerance",intTol,"bonmin.");
 
-	    int i;
 	    for (i = 0; i < numCols; ++i) {
 		if (vars[i]->var_type() == BCP_ContinuousVar)
 		    continue;
-		const double psol = CoinMin(CoinMax(vars[i]->lb(),
-						    primal_solution_[i]),
-					    vars[i]->ub());
+		const double psol = primal_solution_[i];
 		const double frac = psol - floor(psol);
 		const double dist = std::min(frac, 1.0-frac);
 		if (dist >= intTol)
@@ -159,38 +178,45 @@ BM_lp::test_feasibility(const BCP_lp_result& lp_result,
 		/* yipee! a feasible solution! */
 		sol = new BM_solution;
 		//Just copy the solution stored in solver to sol
+		const double ptol = lp_result.primalTolerance();
 		for (i = 0 ; i < numCols ; i++) {
-		    if (primal_solution_[i] > lp_result.primalTolerance())
+		    if (fabs(primal_solution_[i]) > ptol)
 			sol->add_entry(i, primal_solution_[i]); 
 		}
 		sol->setObjective(lower_bound_);
 	    }
-	    if (lower_bound_>upper_bound()-get_param(BCP_lp_par::Granularity) &&
-			par.entry(BM_par::PrintBranchingInfo)) {
-			printf("\
+	    if (lower_bound_ > upper_bound()-get_param(BCP_lp_par::Granularity) &&
+		par.entry(BM_par::PrintBranchingInfo)) {
+		printf("\
 BM_lp: At node %i : will fathom because of high lower bound\n",
-				   current_index());
+		       current_index());
 	    }
 	}
 	else if (nlp.isProvenPrimalInfeasible()) {
 	    // prune it!
+	    // FIXME: if nonconvex, restart from a different place...
 	    lower_bound_ = 1e200;
 	    numNlpFailed_ = 0;
-		if (par.entry(BM_par::PrintBranchingInfo)) {
-			printf("\
+	    if (par.entry(BM_par::PrintBranchingInfo)) {
+		printf("\
 BM_lp: At node %i : will fathom because of infeasibility\n",
-				   current_index());
-		}
+		       current_index());
+	    }
 	}
 	else if (nlp.isAbandoned()) {
+	    if (nlp.isIterationLimitReached()) {
+		printf("\
+BM_lp: At node %i : WARNING: nlp reached iter limit. Will force branching\n",
+		       current_index());
+	    } else {
 		printf("\
 BM_lp: At node %i : WARNING: nlp is abandoned. Will force branching\n",
-			   current_index());
+		       current_index());
+	    }
 	    // nlp failed
 	    nlp.forceBranchable();
 	    lower_bound_ = nlp.getObjValue();
-	    CoinDisjointCopyN(nlp.getColSolution(), vars.size(),
-			      primal_solution_);
+	    CoinDisjointCopyN(colsol, numCols, primal_solution_);
 	    numNlpFailed_ += 1;
 	    // will branch, but save in the user data how many times we have
 	    // failed, and if we fail too many times in a row then just abandon
@@ -201,7 +227,7 @@ BM_lp: At node %i : WARNING: nlp is abandoned. Will force branching\n",
 	    throw BCP_fatal_error("Impossible outcome by nlp.initialSolve()\n");
 	}
     }
-    else {
+    else { // NOT pure B&B
 	/* TODO:
 	   don't test feasibility in every node
 	*/
@@ -220,9 +246,9 @@ BM_lp: At node %i : WARNING: nlp is abandoned. Will force branching\n",
 	}
 
 	if (!feasChecker_) {
-	    feasChecker_ = new IpCbcOACutGenerator2(&nlp, NULL, NULL, 
-						    cutOffIncrement,
-						    integerTolerance, 0, 1);
+	    feasChecker_ = new Bonmin::OACutGenerator2(&nlp, NULL, NULL,
+						       cutOffIncrement,
+						       integerTolerance, 0, 1);
 	    feasChecker_->setLocalSearchNodeLimit(0);
 	    feasChecker_->setMaxLocalSearch(0);
 	    feasChecker_->setMaxLocalSearchPerNode(0);
@@ -301,26 +327,6 @@ BM_lp::cuts_to_rows(const BCP_vec<BCP_var*>& vars, // on what to expand
 
 /****************************************************************************/
 
-void
-BM_lp::vars_to_cols(const BCP_vec<BCP_cut*>& cuts,
-		    BCP_vec<BCP_var*>& vars,
-		    BCP_vec<BCP_col*>& cols,
-		    const BCP_lp_result& lpres,
-		    BCP_object_origin origin, bool allow_multiple)
-{
-    /* All vars better be BM_branching_var, and their columns are empty */
-    const int numVars = vars.size();
-    for (int i = 0; i < numVars; ++i) {
-	BM_branching_var* bv = dynamic_cast<BM_branching_var*>(vars[i]);
-	if (!bv) {
-	    throw BCP_fatal_error("Non-\"BM_branching_var\" in vars_to_cols!\n");
-	}
-	cols.push_back(new BCP_col());
-    }
-}
-
-/****************************************************************************/
-
 double
 BM_lp::compute_lower_bound(const double old_lower_bound,
                            const BCP_lp_result& lpres,
@@ -331,53 +337,9 @@ BM_lp::compute_lower_bound(const double old_lower_bound,
     if (par.entry(BM_par::PureBranchAndBound)) {
 	bd = lower_bound_;
     } else {
-	bd = std::max(babSolver_.mipBound(), lpres.objval());
+	bd = CoinMax(babSolver_.mipBound(), lpres.objval());
     }
-    return std::max(bd, old_lower_bound);
-}
-
-/****************************************************************************/
-
-BM_lp::BmSosInfo::BmSosInfo(const TMINLP::SosInfo * sosinfo, int i)
-{
-    priority = sosinfo->priorities ? sosinfo->priorities[i] : 0;
-    length   = sosinfo->starts[i+1] - sosinfo->starts[i];
-    type     = sosinfo->types[i] == 1 ? 0 : 1;
-    indices  = new int[length];
-    weights  = new double[length];
-    first    = 0;
-    last     = length;
-    CoinDisjointCopyN(sosinfo->indices+sosinfo->starts[i], length, indices);
-    CoinDisjointCopyN(sosinfo->weights+sosinfo->starts[i], length, weights);
-    CoinSort_2(weights, weights+length, indices);
-}
-    
-/*---------------------------------------------------------------------------*/
-
-void BM_lp::setSosFrom(const TMINLP::SosInfo * sosinfo)
-{
-    if (!sosinfo || sosinfo->num == 0)
-	return;
-
-    //we have some sos constraints
-    sos.reserve(sosinfo->num);
-    for (int i = 0; i < sosinfo->num; ++i) {
-	sos.push_back(new BmSosInfo(sosinfo, i));
-    }
-
-    if (sosinfo->priorities) {
-	int * priorities = new int[sosinfo->num];
-	CoinDisjointCopyN(sosinfo->priorities, sosinfo->num, priorities);
-	/* FIXME: we may need to go down in order! */
-	if (par.entry(BM_par::SosWithLowPriorityMoreImportant)) {
-	    CoinSort_2(priorities, priorities+sosinfo->num, &sos[0],
-		       CoinFirstLess_2<int,BM_lp::BmSosInfo*>());
-	} else {
-	    CoinSort_2(priorities, priorities+sosinfo->num, &sos[0],
-		       CoinFirstGreater_2<int,BM_lp::BmSosInfo*>());
-	}
-	delete[] priorities;
-    }
+    return CoinMax(bd, old_lower_bound);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -387,21 +349,3 @@ void BM_lp::process_message(BCP_buffer& buf)
 }
 
 /*---------------------------------------------------------------------------*/
-
-#if 0
-void BM_lp::BmSosInfo::shuffle()
-{
-    if (num == 0)
-	return;
-    int pos = 0;
-    while (pos < num) {
-	int cnt = 0;
-	while (priorities[priority_order[pos]] ==
-	       priorities[priority_order[pos+cnt]]) cnt++;
-	if (cnt > 1) {
-	    std::random_shuffle(priority_order+pos, priority_order+(pos+cnt));
-	}
-	pos += cnt;
-    }
-}
-#endif

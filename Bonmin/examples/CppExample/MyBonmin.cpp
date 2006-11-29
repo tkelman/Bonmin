@@ -17,17 +17,19 @@
 
 #include "CoinTime.hpp"
 
-#include "IpoptInterface.hpp"
+#include "BonOsiTMINLPInterface.hpp"
+#include "BonIpoptSolver.hpp"
 #include "MyTMINLP.hpp"
-#include "CbcBonmin.hpp"
+#include "BonCbc.hpp"
 
 
 
 int main (int argc, char *argv[])
 {
   using namespace Ipopt;
+  using namespace Bonmin;
   SmartPtr<TMINLP> tminlp = new MyTMINLP;
-  IpoptInterface nlpSolver(tminlp);
+  OsiTMINLPInterface nlpSolver(tminlp, new IpoptSolver);
   
   //Option can be set here directly either to bonmin or ipopt
   nlpSolver.retrieve_options()->SetNumericValue("bonmin.time_limit", 1); //changes bonmin's time limit
@@ -40,27 +42,27 @@ int main (int argc, char *argv[])
   double time1 = CoinCpuTime();
   try {
     BonminCbcParam par;
-    BonminBB bb;
-    par(nlpSolver);
+    Bab bb;
+    par(&nlpSolver);
 
-    bb(nlpSolver, par);//process parameter file using Ipopt and do branch and bound
+    bb(&nlpSolver, par);//process parameter file using Ipopt and do branch and bound
 
     std::cout.precision(10);
 
     std::string message;
-    if(bb.mipStatus()==BonminBB::FeasibleOptimal) {
+    if(bb.mipStatus()==Bab::FeasibleOptimal) {
       std::cout<<"\t\"Finished\"\t";
       message = "\nbonmin: Optimal";
     }
-    else if(bb.mipStatus()==BonminBB::ProvenInfeasible) {
+    else if(bb.mipStatus()==Bab::ProvenInfeasible) {
       std::cout<<"\t\"Finished\"\t";
       message = "\nbonmin: Infeasible problem";
     }
-    else if(bb.mipStatus()==BonminBB::Feasible) {
+    else if(bb.mipStatus()==Bab::Feasible) {
       std::cout<<"\t\"Not finished\""<<"\t";
       message = "\n Optimization not finished.";
     }
-    else if(bb.mipStatus()==BonminBB::NoSolutionKnown) {
+    else if(bb.mipStatus()==Bab::NoSolutionKnown) {
       std::cout<<"\t\"Not finished\""<<"\t";
       message = "\n Optimization not finished.";
     }
@@ -71,11 +73,11 @@ int main (int argc, char *argv[])
     <<std::endl;
 
   }
-  catch(IpoptInterface::UnsolvedError &E) {
+  catch(TNLPSolver::UnsolvedError *E) {
     //There has been a failure to solve a problem with Ipopt.
     std::cerr<<"Ipopt has failed to solve a problem"<<std::endl;
   }
-  catch(IpoptInterface::SimpleError &E) {
+  catch(OsiTMINLPInterface::SimpleError &E) {
     std::cerr<<E.className()<<"::"<<E.methodName()
 	     <<std::endl
 	     <<E.message()<<std::endl;

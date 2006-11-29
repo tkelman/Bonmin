@@ -17,11 +17,12 @@ noinst_LTLIBRARIES = libbonminbb.la
 
 # List all source files, including headers
 libbonminbb_la_SOURCES = \
-	CbcBonmin.cpp CbcBonmin.hpp \
-	BonminCbcLpStrategy.cpp BonminCbcLpStrategy.hpp \
-	BonminCbcNlpStrategy.cpp BonminCbcNlpStrategy.hpp \
-	BonminCbcNode.cpp BonminCbcNode.hpp \
-	BonminCbcParam.cpp BonminCbcParam.hpp
+	BonCbc.cpp BonCbc.hpp \
+	BonCbcLpStrategy.cpp BonCbcLpStrategy.hpp \
+	BonCbcNlpStrategy.cpp BonCbcNlpStrategy.hpp \
+	BonCbcNode.cpp BonCbcNode.hpp \
+	BonCbcParam.cpp BonCbcParam.hpp \
+	BonChooseVariable.cpp BonChooseVariable.hpp
 
 # This is for libtool (on Windows)
 libbonminbb_la_LDFLAGS = $(LT_LDFLAGS)
@@ -29,12 +30,17 @@ libbonminbb_la_LDFLAGS = $(LT_LDFLAGS)
 # Here list all include flags, relative to this "srcdir" directory.  This
 # "cygpath" stuff is necessary to compile with native compilers on Windows
 AM_CPPFLAGS = \
-	-I`$(CYGPATH_W) $(srcdir)/../OaInterface` \
-	-I`$(CYGPATH_W) $(srcdir)/../IpoptInterface` \
+	-I`$(CYGPATH_W) $(srcdir)/../OaAlgorithms` \
+	-I`$(CYGPATH_W) $(srcdir)/../Interfaces` \
+	-I`$(CYGPATH_W) $(srcdir)/../Interfaces/Ipopt` \
+	-I`$(CYGPATH_W) $(srcdir)/../Interfaces/Ampl` \
+	-I`$(CYGPATH_W) $(srcdir)/../Interfaces/Filter` \
 	-I`$(CYGPATH_W) $(IPOPTOBJDIR)/inc` \
 	-I`$(CYGPATH_W) $(IPOPTSRCDIR)/src/Common` \
 	-I`$(CYGPATH_W) $(IPOPTSRCDIR)/src/Interfaces` \
 	-I`$(CYGPATH_W) $(IPOPTSRCDIR)/src/LinAlg` \
+	-I`$(CYGPATH_W) $(IPOPTSRCDIR)/src/Algorithm` \
+	-I`$(CYGPATH_W) $(IPOPTSRCDIR)/src/Algorithm/LinearSolvers` \
 	-I`$(CYGPATH_W) $(COINUTILSSRCDIR)/src` \
 	-I`$(CYGPATH_W) $(COINUTILSOBJDIR)/inc` \
 	-I`$(CYGPATH_W) $(CLPOBJDIR)/inc` \
@@ -70,8 +76,8 @@ DEFAULT_INCLUDES = -I. -I`$(CYGPATH_W) $(srcdir)` -I$(top_builddir)/inc
 ########################################################################
 
 include_HEADERS = \
-	CbcBonmin.hpp \
-	BonminCbcParam.hpp
+	BonCbc.hpp \
+	BonCbcParam.hpp
 
 ########################################################################
 #                            Astyle stuff                              #
@@ -79,11 +85,12 @@ include_HEADERS = \
 
 # Here repeat all source files, with "bak" appended
 ASTYLE_FILES = \
-	BonminCbcParam.cppbak BonminCbcParam.hppbak \
-	CbcBonmin.cppbak CbcBonmin.hppbak \
-	BonminCbcLpStrategy.cppbak BonminCbcLpStrategy.hppbak \
-	BonminCbcNlpStrategy.cppbak BonminCbcNlpStrategy.hppbak \
-	BonminCbcNode.cppbak BonminCbcNode.hppbak
+	BonCbcParam.cppbak BonCbcParam.hppbak \
+	BonCbc.cppbak BonCbc.hppbak \
+	BonCbcLpStrategy.cppbak BonCbcLpStrategy.hppbak \
+	BonCbcNlpStrategy.cppbak BonCbcNlpStrategy.hppbak \
+	BonCbcNode.cppbak BonCbcNode.hppbak \
+	BonChooseVariable.cppbak BonChooseVariable.hppbak
 
 ASTYLE = @ASTYLE@
 ASTYLEFLAGS = @ASTYLEFLAGS@

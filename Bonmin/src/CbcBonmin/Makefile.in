@@ -60,8 +60,9 @@ CONFIG_HEADER = $(top_builddir)/inc/config_bonmin.h
 CONFIG_CLEAN_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libbonminbb_la_LIBADD =
-am_libbonminbb_la_OBJECTS = CbcBonmin.lo BonminCbcLpStrategy.lo \
-	BonminCbcNlpStrategy.lo BonminCbcNode.lo BonminCbcParam.lo
+am_libbonminbb_la_OBJECTS = BonCbc.lo BonCbcLpStrategy.lo \
+	BonCbcNlpStrategy.lo BonCbcNode.lo BonCbcParam.lo \
+	BonChooseVariable.lo
 libbonminbb_la_OBJECTS = $(am_libbonminbb_la_OBJECTS)
 depcomp = $(SHELL) $(top_srcdir)/../depcomp
 am__depfiles_maybe = depfiles
@@ -149,6 +150,8 @@ COIN_HAS_DYLP_FALSE = @COIN_HAS_DYLP_FALSE@
 COIN_HAS_DYLP_TRUE = @COIN_HAS_DYLP_TRUE@
 COIN_HAS_FMP_FALSE = @COIN_HAS_FMP_FALSE@
 COIN_HAS_FMP_TRUE = @COIN_HAS_FMP_TRUE@
+COIN_HAS_FSQP_FALSE = @COIN_HAS_FSQP_FALSE@
+COIN_HAS_FSQP_TRUE = @COIN_HAS_FSQP_TRUE@
 COIN_HAS_GLPK_FALSE = @COIN_HAS_GLPK_FALSE@
 COIN_HAS_GLPK_TRUE = @COIN_HAS_GLPK_TRUE@
 COIN_HAS_IPOPT_FALSE = @COIN_HAS_IPOPT_FALSE@
@@ -194,6 +197,8 @@ FADDLIBS = @FADDLIBS@
 FFLAGS = @FFLAGS@
 FMPINCDIR = @FMPINCDIR@
 FMPLIB = @FMPLIB@
+FSQPINCDIR = @FSQPINCDIR@
+FSQPLIB = @FSQPLIB@
 GLPKINCDIR = @GLPKINCDIR@
 GLPKLIB = @GLPKLIB@
 HAVE_EXTERNALS_FALSE = @HAVE_EXTERNALS_FALSE@
@@ -247,8 +252,6 @@ SYMSRCDIR = @SYMSRCDIR@
 VERSION = @VERSION@
 VOLOBJDIR = @VOLOBJDIR@
 VOLSRCDIR = @VOLSRCDIR@
-VPATH_CONFIG_FALSE = @VPATH_CONFIG_FALSE@
-VPATH_CONFIG_TRUE = @VPATH_CONFIG_TRUE@
 VPATH_DISTCLEANFILES = @VPATH_DISTCLEANFILES@
 XPRINCDIR = @XPRINCDIR@
 XPRLIB = @XPRLIB@
@@ -313,11 +316,12 @@ noinst_LTLIBRARIES = libbonminbb.la
 
 # List all source files, including headers
 libbonminbb_la_SOURCES = \
-	CbcBonmin.cpp CbcBonmin.hpp \
-	BonminCbcLpStrategy.cpp BonminCbcLpStrategy.hpp \
-	BonminCbcNlpStrategy.cpp BonminCbcNlpStrategy.hpp \
-	BonminCbcNode.cpp BonminCbcNode.hpp \
-	BonminCbcParam.cpp BonminCbcParam.hpp
+	BonCbc.cpp BonCbc.hpp \
+	BonCbcLpStrategy.cpp BonCbcLpStrategy.hpp \
+	BonCbcNlpStrategy.cpp BonCbcNlpStrategy.hpp \
+	BonCbcNode.cpp BonCbcNode.hpp \
+	BonCbcParam.cpp BonCbcParam.hpp \
+	BonChooseVariable.cpp BonChooseVariable.hpp
 
 
 # This is for libtool (on Windows)
@@ -325,11 +329,16 @@ libbonminbb_la_LDFLAGS = $(LT_LDFLAGS)
 
 # Here list all include flags, relative to this "srcdir" directory.  This
 # "cygpath" stuff is necessary to compile with native compilers on Windows
-AM_CPPFLAGS = -I`$(CYGPATH_W) $(srcdir)/../OaInterface` \
-	-I`$(CYGPATH_W) $(srcdir)/../IpoptInterface` -I`$(CYGPATH_W) \
+AM_CPPFLAGS = -I`$(CYGPATH_W) $(srcdir)/../OaAlgorithms` \
+	-I`$(CYGPATH_W) $(srcdir)/../Interfaces` -I`$(CYGPATH_W) \
+	$(srcdir)/../Interfaces/Ipopt` -I`$(CYGPATH_W) \
+	$(srcdir)/../Interfaces/Ampl` -I`$(CYGPATH_W) \
+	$(srcdir)/../Interfaces/Filter` -I`$(CYGPATH_W) \
 	$(IPOPTOBJDIR)/inc` -I`$(CYGPATH_W) $(IPOPTSRCDIR)/src/Common` \
 	-I`$(CYGPATH_W) $(IPOPTSRCDIR)/src/Interfaces` -I`$(CYGPATH_W) \
 	$(IPOPTSRCDIR)/src/LinAlg` -I`$(CYGPATH_W) \
+	$(IPOPTSRCDIR)/src/Algorithm` -I`$(CYGPATH_W) \
+	$(IPOPTSRCDIR)/src/Algorithm/LinearSolvers` -I`$(CYGPATH_W) \
 	$(COINUTILSSRCDIR)/src` -I`$(CYGPATH_W) \
 	$(COINUTILSOBJDIR)/inc` -I`$(CYGPATH_W) $(CLPOBJDIR)/inc` \
 	-I`$(CYGPATH_W) $(CLPSRCDIR)/src` -I`$(CYGPATH_W) \
@@ -355,8 +364,8 @@ DEFAULT_INCLUDES = -I. -I`$(CYGPATH_W) $(srcdir)` -I$(top_builddir)/inc
 #                Headers that need to be installed                     #
 ########################################################################
 include_HEADERS = \
-	CbcBonmin.hpp \
-	BonminCbcParam.hpp
+	BonCbc.hpp \
+	BonCbcParam.hpp
 
 
 ########################################################################
@@ -365,11 +374,12 @@ include_HEADERS = \
 
 # Here repeat all source files, with "bak" appended
 ASTYLE_FILES = \
-	BonminCbcParam.cppbak BonminCbcParam.hppbak \
-	CbcBonmin.cppbak CbcBonmin.hppbak \
-	BonminCbcLpStrategy.cppbak BonminCbcLpStrategy.hppbak \
-	BonminCbcNlpStrategy.cppbak BonminCbcNlpStrategy.hppbak \
-	BonminCbcNode.cppbak BonminCbcNode.hppbak
+	BonCbcParam.cppbak BonCbcParam.hppbak \
+	BonCbc.cppbak BonCbc.hppbak \
+	BonCbcLpStrategy.cppbak BonCbcLpStrategy.hppbak \
+	BonCbcNlpStrategy.cppbak BonCbcNlpStrategy.hppbak \
+	BonCbcNode.cppbak BonCbcNode.hppbak \
+	BonChooseVariable.cppbak BonChooseVariable.hppbak
 
 CLEANFILES = $(ASTYLE_FILES)
 SUFFIXES = .cppbak .hppbak
@@ -424,11 +434,12 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/BonminCbcLpStrategy.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/BonminCbcNlpStrategy.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/BonminCbcNode.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/BonminCbcParam.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/CbcBonmin.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/BonCbc.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/BonCbcLpStrategy.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/BonCbcNlpStrategy.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/BonCbcNode.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/BonCbcParam.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/BonChooseVariable.Plo@am__quote@
 
 .cpp.o:
 @am__fastdepCXX_TRUE@	if $(CXXCOMPILE) -MT $@ -MD -MP -MF "$(DEPDIR)/$*.Tpo" -c -o $@ $<; \
