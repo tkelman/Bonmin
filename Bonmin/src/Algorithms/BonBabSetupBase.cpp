@@ -100,7 +100,56 @@ namespace Bonmin
     }
 
     for (HeuristicMethods::iterator i = heuristics_.begin() ; i != heuristics_.end() ; i++) {
-      heuristics_.push_back((*i)->clone());
+      heuristics_.push_back(*i);
+      heuristics_.back().heuristic = i->heuristic->clone();
+    }
+  
+    if(other.branchingMethod_ != NULL)
+      branchingMethod_ = other.branchingMethod_->clone();
+    if (IsValid(other.options_)) {
+      options_ = new OptionsList;
+      *options_ = *other.options_;
+    }
+    CoinCopyN(other.intParam_, NumberIntParam, intParam_);
+    CoinCopyN(other.doubleParam_, NumberDoubleParam, doubleParam_);
+    for (unsigned int i = 0 ; i < objects_.size() ; i++) {
+      objects_[i]->clone();
+    }
+  }
+  /** Copy constructor with change of nlp. */
+  BabSetupBase::BabSetupBase(const BabSetupBase & other,
+                             OsiTMINLPInterface &nlp):
+      nonlinearSolver_(NULL),
+      continuousSolver_(NULL),
+      cutGenerators_(),
+      heuristics_(),
+      branchingMethod_(NULL),
+      nodeComparisonMethod_(other.nodeComparisonMethod_),
+      treeTraversalMethod_(other.treeTraversalMethod_),
+      objects_(other.objects_),
+      journalist_(other.journalist_),
+      options_(NULL),
+      roptions_(other.roptions_),
+      readOptions_(other.readOptions_)
+  {
+      nonlinearSolver_ = &nlp;
+    if (other.continuousSolver_ != other.nonlinearSolver_) {
+      continuousSolver_ = NULL;
+    }
+    else
+      continuousSolver_ = nonlinearSolver_;
+    if (other.lpMessageHandler_) {
+      lpMessageHandler_ = other.lpMessageHandler_->clone();
+      continuousSolver_->passInMessageHandler(lpMessageHandler_);
+    }
+    for (CuttingMethods::const_iterator i = other.cutGenerators_.begin() ; i != other.cutGenerators_.end() ; i++) {
+      cutGenerators_.push_back(*i);
+      cutGenerators_.back().cgl = cutGenerators_.back().cgl->clone();
+    }
+
+    for (HeuristicMethods::iterator i = heuristics_.begin() ; i != heuristics_.end() ; i++) {
+      heuristics_.push_back(*i);
+      heuristics_.back().heuristic = i->heuristic->clone();
     }
   
     if(other.branchingMethod_ != NULL)
@@ -134,6 +183,11 @@ namespace Bonmin
   }
 
 
+  /** Make a copy with solver replace by one passed .*/
+  BabSetupBase *
+  BabSetupBase::clone(OsiTMINLPInterface&nlp)const {
+     throw(CoinError("BabSetupBase", "CloneWithOtherNlp","Not implemented"));
+  }
 
 
   void
@@ -207,7 +261,7 @@ namespace Bonmin
     }
 
     for (HeuristicMethods::iterator i = heuristics_.begin() ; i != heuristics_.end() ; i++) {
-      delete *i;
+      delete i->heuristic;
     }
 
     for (unsigned int i = 0 ; i < objects_.size() ; i++) {
@@ -255,11 +309,12 @@ namespace Bonmin
     // Set branching strategy
     if (varSelection == MOST_FRACTIONAL) {
       intParam_[NumberStrong] = 0;
-      options_->SetIntegerValue("number_strong_branch",intParam_[BabSetupBase::NumberStrong],"bonmin.");
+      intParam_[MinReliability] = 0;
+      options_->SetIntegerValue("bonmin.number_strong_branch",intParam_[BabSetupBase::NumberStrong],true, true);
     }
     else if (varSelection == RELIABILITY_BRANCHING) {
       intParam_[MinReliability] = 10;
-      options_->SetIntegerValue("number_before_trust",intParam_[BabSetupBase::MinReliability],"bonmin.");
+      options_->SetIntegerValue("bonmin.number_before_trust",intParam_[BabSetupBase::MinReliability],true, true);
     }
   }
 
@@ -274,7 +329,7 @@ namespace Bonmin
   {
     OsiTMINLPInterface::registerOptions(roptions);
     /* BabSetup options.*/
-    roptions->SetRegisteringCategory("Output ond log-levels ptions", RegisteredOptions::BonminCategory);
+    roptions->SetRegisteringCategory("Output ond log-levels options", RegisteredOptions::BonminCategory);
 
     roptions->AddBoundedIntegerOption("bb_log_level",
         "specify main branch-and-bound log level.",
@@ -365,7 +420,7 @@ namespace Bonmin
 
     roptions->AddStringOption5("node_comparison",
         "Choose the node selection strategy.",
-        "dynamic",
+        "best-bound",
         "best-bound", "choose node with the smallest bound,",
         "depth-first", "Perform depth first search,",
         "breadth-first", "Perform breadth first search,",
@@ -377,7 +432,7 @@ namespace Bonmin
 
     roptions->AddStringOption5("tree_search_strategy",
         "Pick a strategy for traversing the tree",
-        "top-node",
+        "probed-dive",
         "top-node"," Always pick the top node as sorted by the node comparison function",
         "dive","Dive in the tree if possible, otherwise pick top node as sorted by the tree comparison function.",
         "probed-dive","Dive in the tree exploring two childs before continuing the dive at each level.",

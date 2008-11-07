@@ -42,6 +42,7 @@ AM_CPPFLAGS = \
 	-I`$(CYGPATH_W) $(srcdir)/Branching` \
 	-I`$(CYGPATH_W) $(srcdir)/OaGenerators` \
 	-I`$(CYGPATH_W) $(srcdir)/../CbcBonmin` \
+	-I`$(CYGPATH_W) $(srcdir)/../CbcBonmin/Heuristics` \
 	-I`$(CYGPATH_W) $(srcdir)/../Interfaces` \
 	-I`$(CYGPATH_W) $(srcdir)/../Interfaces/Ipopt` \
 	-I`$(CYGPATH_W) $(srcdir)/../Interfaces/Filter` \

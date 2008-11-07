@@ -151,9 +151,9 @@ namespace Bonmin
 
     for (BabSetupBase::HeuristicMethods::iterator i = s.heuristics().begin() ;
         i != s.heuristics().end() ; i++) {
-      CbcHeuristic * heu = *i;
+      CbcHeuristic * heu = i->heuristic;
       heu->setModel(&model_);
-      model_.addHeuristic(*i);
+      model_.addHeuristic(heu, i->id.c_str());
     }
 
 
@@ -171,6 +171,7 @@ namespace Bonmin
     bool ChangedObject = false;
     //Pass over user set branching priorities to Cbc
     if (s.continuousSolver()->objects()==NULL) {
+      //assert (s.branchingMethod() == NULL);
       const OsiTMINLPInterface * nlpSolver = s.nonlinearSolver();
       //set priorities, prefered directions...
       const int * priorities = nlpSolver->getPriorities();
@@ -200,6 +201,7 @@ namespace Bonmin
         }
       }
 
+#if 1
       // Now pass user set Sos constraints (code inspired from CoinSolve.cpp)
       const TMINLP::SosInfo * sos = s.nonlinearSolver()->model()->sosConstraints();
       if (!s.getIntParameter(BabSetupBase::DisableSos) && sos && sos->num > 0) 
@@ -255,7 +257,7 @@ namespace Bonmin
           delete objects[i];
         delete [] objects;
       }
-
+#endif
       //If Setup contains more objects add them to Cbc
       if (s.objects().size()) {
         CbcObject ** objects = new CbcObject *[s.objects().size()];
@@ -271,12 +273,32 @@ namespace Bonmin
       replaceIntegers(model_.objects(), model_.numberObjects());
     }
     else {//Pass in objects to Cbc
+    // Redundant definition of default branching (as Default == User)
+    assert (s.branchingMethod() != NULL);
+
+    if (!usingCouenne_)
       model_.addObjects (s.continuousSolver()->numberObjects(),
 			 s.continuousSolver()->objects());
+    else {
+      // add nonlinear and integer objects (need to add OsiSOS)
+      int nco = s.continuousSolver () -> numberObjects ();
+      OsiObject **objs = new OsiObject * [nco];
+      for (int i=0; i<nco; i++) 
+	objs [i] = s.continuousSolver () -> objects () [i];
+      model_.addObjects (nco, objs);
+      delete [] objs;
+    }
 
-      if (usingCouenne_)// && model_. solver ()) 
+    CbcBranchDefaultDecision branch;
+    s.branchingMethod()->setSolver(model_.solver());
+    BonChooseVariable * strong2 = dynamic_cast<BonChooseVariable *>(s.branchingMethod());
+    if (strong2)
+      strong2->setCbcModel(&model_);
+    branch.setChooseMethod(*s.branchingMethod());
+
+    model_.setBranchingMethod(&branch);
 	// prevent duplicating object when copying in CbcModel.cpp
-	model_. solver () -> deleteObjects ();
+	model_.solver()->deleteObjects();
     }
 
     model_.setDblParam(CbcModel::CbcCutoffIncrement, s.getDoubleParameter(BabSetupBase::CutoffDecr));
@@ -350,7 +372,6 @@ namespace Bonmin
     model_.setNumberStrong(s.getIntParameter(BabSetupBase::NumberStrong));
 
     model_.setNumberBeforeTrust(s.getIntParameter(BabSetupBase::MinReliability));
-
     model_.setNumberPenalties(8);
 
     model_.setDblParam(CbcModel::CbcMaximumSeconds, s.getDoubleParameter(BabSetupBase::MaxTime));
@@ -362,17 +383,6 @@ namespace Bonmin
     model_.setIntegerTolerance(s.getDoubleParameter(BabSetupBase::IntTol));
 
 
-    // Redundant definition of default branching (as Default == User)
-    if (s.branchingMethod() != NULL) {
-      CbcBranchDefaultDecision branch;
-      s.branchingMethod()->setSolver(model_.solver());
-      BonChooseVariable * strong2 = dynamic_cast<BonChooseVariable *>(s.branchingMethod());
-      if (strong2)
-        strong2->setCbcModel(&model_);
-      branch.setChooseMethod(*s.branchingMethod());
-
-      model_.setBranchingMethod(&branch);
-    }
 
     //Get objects from model_ if it is not null means there are some sos constraints or non-integer branching object
     // pass them to cut generators.
@@ -416,10 +426,14 @@ namespace Bonmin
       }
     }
 
+   try {
     //Get the time and start.
     model_.initialSolve();
-    model_.solver()->resolve();
-    model_.resolve(NULL, 1);
+
+    // for Couenne
+    if (usingCouenne_)
+      model_.passInSolverCharacteristics (bonBabInfoPtr);
+
     continuousRelaxation_ =model_.solver()->getObjValue();
     if (specOpt==16)//Set warm start point for Ipopt
     {
@@ -447,7 +461,15 @@ namespace Bonmin
     // to get node parent info in Cbc, pass parameter 3.
     //model_.branchAndBound(3);
     model_.branchAndBound();
-
+    }
+    catch(TNLPSolver::UnsolvedError *E){
+      s.nonlinearSolver()->model()->finalize_solution(TMINLP::MINLP_ERROR,
+           0,
+           NULL,
+           DBL_MAX);
+      throw E;
+   
+    }
     numNodes_ = model_.getNodeCount();
     bestObj_ = model_.getObjValue();
     bestBound_ = model_.getBestPossibleObjValue();
@@ -476,39 +498,32 @@ namespace Bonmin
       //CglStored * stored = dynamic_cast<CglStored*>(generator->generator());
        if (true&&!generator->numberCutsInTotal())
 	continue;
-      CoinMessageHandler * cbc_handler = model_.messageHandler();
-      const CoinMessages & cbc_messages = model_.messages();
-      int cbc_log_level = model_.logLevel();
-      FILE * fp = cbc_handler->filePointer();
-      if(cbc_log_level >= 1) {
-        fprintf(fp, "%s was tried %d times and created %d cuts of which %d were active after adding rounds of cuts",
-                generator->cutGeneratorName(),
-                generator->numberTimesEntered(),
-                generator->numberCutsInTotal()+
-                generator->numberColumnCuts(),
-                generator->numberCutsActive());
-        if (generator->timing()) {
-          fprintf(fp, " (%.3f seconds)\n",generator->timeInCutGenerator());
-        }
-        else {
-          fprintf(fp, "\n");
-        }
+       if(modelHandler_->logLevel() >= 1) {
+        *modelHandler_ << generator->cutGeneratorName()
+                << "was tried" << generator->numberTimesEntered()
+                << "times and created" << generator->numberCutsInTotal()+generator->numberColumnCuts()
+                << "cuts of which" << generator->numberCutsActive()
+                << "were active after adding rounds of cuts";
+         if (generator->timing()) {
+                char timebuf[20];
+                sprintf(timebuf, "(%.3fs)", generator->timeInCutGenerator());
+                *modelHandler_ << timebuf << CoinMessageEol;
+         }
+         else {
+                *modelHandler_ << CoinMessageEol;
+         }
       }
     }
 
     if (hasFailed) {
-      CoinMessageHandler * cbc_handler = model_.messageHandler();
-      const CoinMessages & cbc_messages = model_.messages();
-      int cbc_log_level = model_.logLevel();
-      FILE * fp = cbc_handler->filePointer();
-      fprintf(fp,
-     "************************************************************\n"
-     "WARNING : Optimization failed on an NLP during optimization\n"
-     "\n (no optimal value found within tolerances).\n"
-     "Optimization was not stopped because option \n"
-     "\"nlp_failure_behavior\" has been set to fathom but\n"
-     " beware that reported solution may not be optimal\n"
-     "************************************************************\n");
+        *model_.messageHandler()
+      << "************************************************************" << CoinMessageEol
+      << "WARNING : Optimization failed on an NLP during optimization"  << CoinMessageEol
+      << "  (no optimal value found within tolerances)."  << CoinMessageEol
+      << "  Optimization was not stopped because option"  << CoinMessageEol
+      << "\"nlp_failure_behavior\" has been set to fathom but"  << CoinMessageEol
+      << " beware that reported solution may not be optimal"  << CoinMessageEol
+      << "************************************************************" << CoinMessageEol;
     }
     TMINLP::SolverReturn status = TMINLP::MINLP_ERROR;
 

@@ -8,6 +8,7 @@
 
 AUTOMAKE_OPTIONS = foreign
 
+
 # Name of the library in this directory
 lib_LTLIBRARIES = libbonmin.la
 if COIN_HAS_ASL
@@ -146,6 +147,7 @@ ASTYLEFLAGS = @ASTYLEFLAGS@
 
 CLEANFILES = $(ASTYLE_FILES)
 
+
 DISTCLEANFILES = \
 	CbcCompareUser.cpp CbcBranchUser.cpp
 
@@ -162,3 +164,24 @@ astyle: $(ASTYLE_FILES)
 	mv $< $@
 	$(ASTYLE) $(ASTYLEFLAGS) < $@ > $<
 	touch $@
+
+########################################################################
+#                            addlibs stuff                             #
+########################################################################
+addlibsdir = $(prefix)/share/doc/coin/$(PACKAGE_NAME)/
+
+ADDLIBS_FILES = \
+	bonmin_addlibs_cpp.txt 
+
+# Make sure the addlibs files are installed in lib
+install-exec-local:
+	for i in $(ADDLIBS_FILES); do \
+	  $(install_sh_DATA) $$i $(DESTDIR)$(addlibsdir)/$$i; \
+	done
+
+uninstall-local:
+	for i in $(ADDLIBS_FILES); do \
+	  rm -f $(DESTDIR)$(addlibsdir)/$$i; \
+	done
+
+

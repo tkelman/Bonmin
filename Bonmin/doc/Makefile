@@ -12,5 +12,5 @@ all: $(OUTPUTS) Head.tex
 	./genHtml.sh $<
 	touch $@
 
-install:
-	cp -rv bib/ Install/ Intro/ Obtain/ options_list/ options_set/ use/ ../../../html/
+install_www:
+	cp -rv bib Install Intro Obtain options_list options_set use ../../../../html/
