@@ -994,6 +994,7 @@ void OsiTMINLPInterface::extractSenseRhsAndRange() const
 {
   assert(rowsense_==NULL&&rhs_==NULL&&rowrange_==NULL);
   int numrows = problem_->num_constraints();
+  if(numrows == 0) return;
   const double * rowLower = getRowLower();
   const double * rowUpper = getRowUpper();
   rowsense_ = new char [numrows];
@@ -1517,8 +1518,8 @@ OsiTMINLPInterface::getDblParam(OsiDblParam key, double& value) const
     break;
   case OsiPrimalTolerance:
     options()->GetNumericValue("tol", value,"");
-    value = 1e-07;
-    retval = false;
+    //value = 1e-07;
+    retval = true;
     break;
   case OsiObjOffset:
     retval = OsiSolverInterface::getDblParam(key, value);
@@ -1576,24 +1577,24 @@ OsiTMINLPInterface::randomStartingPoint()
     if(x_init[i] < colLower[i] || x_init[i] > colUpper[i])
       randomGenerationType = uniform;
     if(randomGenerationType_ == uniform){
-      double lower = min(-maxRandomRadius_,colUpper[i] - maxRandomRadius_);
-      lower = max(colLower[i], lower);
-      double upper = max(maxRandomRadius_,colLower[i] + maxRandomRadius_);
-      upper = min(colUpper[i],upper);
-      lower = min(upper,lower);
-      upper = max(upper, lower);
+      double lower = std::min(-maxRandomRadius_,colUpper[i] - maxRandomRadius_);
+      lower = std::max(colLower[i], lower);
+      double upper = std::max(maxRandomRadius_,colLower[i] + maxRandomRadius_);
+      upper = std::min(colUpper[i],upper);
+      lower = std::min(upper,lower);
+      upper = std::max(upper, lower);
       double interval = upper - lower;
       sol[i] = CoinDrand48()*(interval) + lower;}
     else if (randomGenerationType_ == perturb){
-      const double lower = max(x_init[i] - max_perturbation_, colLower[i]);
-      const double upper = min(x_init[i] + max_perturbation_, colUpper[i]);
+      const double lower = std::max(x_init[i] - max_perturbation_, colLower[i]);
+      const double upper = std::min(x_init[i] + max_perturbation_, colUpper[i]);
       const double interval = upper - lower;
       sol[i]  = lower + CoinDrand48()*(interval);
     }
     else if (randomGenerationType_ == perturb_suffix){
       const double radius = perturb_radius[i];
-      const double lower = max(x_init[i] - radius*max_perturbation_, colLower[i]);
-      const double upper = min(x_init[i] + radius*max_perturbation_, colUpper[i]);
+      const double lower = std::max(x_init[i] - radius*max_perturbation_, colLower[i]);
+      const double upper = std::min(x_init[i] + radius*max_perturbation_, colUpper[i]);
       const double interval = upper - lower;
       sol[i]  = lower + CoinDrand48()*(interval);
     }
@@ -1660,10 +1661,10 @@ OsiTMINLPInterface::getConstraintsViolation(const double *x, double &obj)
     if(!constTypes_ || constTypes_[i] == TNLP::NON_LINEAR) {
       double rowViolation = 0;
       if(rowLower[i] > -1e10)
-         rowViolation = max(0.,rowLower[i] - g[i]);
+         rowViolation = std::max(0.,rowLower[i] - g[i]);
 
       if(rowUpper[i] < 1e10);
-        rowViolation = max(rowViolation, g[i] - rowUpper[i]);
+        rowViolation = std::max(rowViolation, g[i] - rowUpper[i]);
 
       norm = rowViolation > norm ? rowViolation : norm;
     }
@@ -1832,8 +1833,8 @@ OsiTMINLPInterface::getOuterApproximation(OsiCuts &cs, const double * x, bool ge
     if(x2 != NULL) {
       double rhs = cuts[cutIdx].dotProduct(x2);
       double violation = 0.;
-      violation = max(violation, rhs - ub[cutIdx]);
-      violation = max(violation, lb[cutIdx] - rhs);
+      violation = std::max(violation, rhs - ub[cutIdx]);
+      violation = std::max(violation, lb[cutIdx] - rhs);
       if(violation < theta) {
         if(oaHandler_->logLevel() > 0)
           oaHandler_->message(CUT_NOT_VIOLATED_ENOUGH, oaMessages_)<<cut2rowIdx[cutIdx]<<violation<<CoinMessageEol;
@@ -1895,7 +1896,7 @@ OsiTMINLPInterface::getOuterApproximation(OsiCuts &cs, const double * x, bool ge
           x[i],
           lb[nNonLinear_],
           ub[nNonLinear_],tiny_, 1e-15)) {
-        //	      minCoeff = min(fabs(obj[i]), minCoeff);
+        //	      minCoeff = std::min(fabs(obj[i]), minCoeff);
         v.insert(i,obj[i]);
         lb[nNonLinear_] += obj[i] * x[i];
         ub[nNonLinear_] += obj[i] * x[i];
@@ -1906,7 +1907,7 @@ OsiTMINLPInterface::getOuterApproximation(OsiCuts &cs, const double * x, bool ge
     bool genCut = true;
     if(x2 != NULL) {
       double rhs = v.dotProduct(x2);
-      double violation = max(0., rhs - ub[nNonLinear_]);
+      double violation = std::max(0., rhs - ub[nNonLinear_]);
       if(violation < theta) genCut = false;
     }
     if(genCut) {
@@ -2551,7 +2552,7 @@ void OsiTMINLPInterface::initialSolve()
     int printOptions;
     app_->options()->GetEnumValue("print_user_options",printOptions,"bonmin.");
     if(printOptions)
-      app_->options()->SetStringValue("print_user_options","yes");
+      app_->options()->SetStringValue("print_user_options","yes",true,true);
   }
   if(exposeWarmStart_)
     app_->disableWarmStart(); 
@@ -2636,7 +2637,7 @@ OsiTMINLPInterface::resolve()
   }
   else if(numRetryResolve_ ||
 	  (numRetryInfeasibles_ && isProvenPrimalInfeasible() ))
-    resolveForCost(max(numRetryResolve_, numRetryInfeasibles_), 0);
+    resolveForCost(std::max(numRetryResolve_, numRetryInfeasibles_), 0);
 
   // if warmstart_ is not empty then had to use resolveFor... and that created
   // the warmstart at the end, and we have nothing to do here. Otherwise...

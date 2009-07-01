@@ -82,7 +82,8 @@ namespace Bonmin
       journalist_(other.journalist_),
       options_(NULL),
       roptions_(other.roptions_),
-      readOptions_(other.readOptions_)
+      readOptions_(other.readOptions_),
+      lpMessageHandler_(NULL)
   {
     if (other.nonlinearSolver_) {
       nonlinearSolver_ = static_cast<OsiTMINLPInterface *>(other.nonlinearSolver_->clone());
@@ -130,7 +131,8 @@ namespace Bonmin
       journalist_(other.journalist_),
       options_(NULL),
       roptions_(other.roptions_),
-      readOptions_(other.readOptions_)
+      readOptions_(other.readOptions_),
+      lpMessageHandler_(NULL)
   {
       nonlinearSolver_ = &nlp;
     if (other.continuousSolver_ != other.nonlinearSolver_) {
@@ -241,7 +243,8 @@ namespace Bonmin
       journalist_(app->journalist()),
       options_(app->options()),
       roptions_(app->roptions()),
-      readOptions_(true)
+      readOptions_(true),
+      lpMessageHandler_(NULL)
   {
     CoinCopyN(defaultIntParam_, NumberIntParam, intParam_);
     CoinCopyN(defaultDoubleParam_, NumberDoubleParam, doubleParam_);
@@ -310,11 +313,11 @@ namespace Bonmin
     if (varSelection == MOST_FRACTIONAL) {
       intParam_[NumberStrong] = 0;
       intParam_[MinReliability] = 0;
-      options_->SetIntegerValue("number_strong_branch",intParam_[BabSetupBase::NumberStrong],"bonmin.");
+      options_->SetIntegerValue("bonmin.number_strong_branch",intParam_[BabSetupBase::NumberStrong],true, true);
     }
     else if (varSelection == RELIABILITY_BRANCHING) {
       intParam_[MinReliability] = 10;
-      options_->SetIntegerValue("number_before_trust",intParam_[BabSetupBase::MinReliability],"bonmin.");
+      options_->SetIntegerValue("bonmin.number_before_trust",intParam_[BabSetupBase::MinReliability],true, true);
     }
   }
 
@@ -420,7 +423,7 @@ namespace Bonmin
 
     roptions->AddStringOption5("node_comparison",
         "Choose the node selection strategy.",
-        "dynamic",
+        "best-bound",
         "best-bound", "choose node with the smallest bound,",
         "depth-first", "Perform depth first search,",
         "breadth-first", "Perform breadth first search,",
@@ -432,7 +435,7 @@ namespace Bonmin
 
     roptions->AddStringOption5("tree_search_strategy",
         "Pick a strategy for traversing the tree",
-        "top-node",
+        "probed-dive",
         "top-node"," Always pick the top node as sorted by the node comparison function",
         "dive","Dive in the tree if possible, otherwise pick top node as sorted by the tree comparison function.",
         "probed-dive","Dive in the tree exploring two childs before continuing the dive at each level.",

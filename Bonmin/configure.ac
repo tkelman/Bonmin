@@ -12,10 +12,10 @@
 
 AC_PREREQ(2.59)
 
-AC_INIT([Bonmin],[0.99stable],[coin-bonmin@list.coin-or.org])
+AC_INIT([Bonmin],[1.1stable],[coin-bonmin@list.coin-or.org])
 
 AC_COPYRIGHT([
-Copyright 2006, 2008 International Business Machines and others.
+Copyright 2006, 2009 International Business Machines and others.
 All Rights Reserved.
 This file is part of the open source package BONMIN which is distributed
 under the Common Public License.])
@@ -201,6 +201,7 @@ AC_CONFIG_FILES([Makefile
                  experimental/NotConvex/Makefile
                  experimental/FP/Makefile
                  src/CbcBonmin/Makefile
+                 src/CbcBonmin/bonmin_addlibs_cpp.txt
                  src/Interfaces/Makefile
                  src/Interfaces/Ipopt/Makefile
                  src/Interfaces/Filter/Makefile

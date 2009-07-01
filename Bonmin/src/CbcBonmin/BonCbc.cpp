@@ -286,6 +286,7 @@ namespace Bonmin
       for (int i=0; i<nco; i++) 
 	objs [i] = s.continuousSolver () -> objects () [i];
       model_.addObjects (nco, objs);
+      delete [] objs;
     }
 
     CbcBranchDefaultDecision branch;
@@ -377,6 +378,8 @@ namespace Bonmin
 
     model_.setMaximumNodes(s.getIntParameter(BabSetupBase::MaxNodes));
 
+    model_.setMaximumNumberIterations(s.getIntParameter(BabSetupBase::MaxIterations));
+
     model_.setMaximumSolutions(s.getIntParameter(BabSetupBase::MaxSolutions));
 
     model_.setIntegerTolerance(s.getDoubleParameter(BabSetupBase::IntTol));
@@ -425,10 +428,14 @@ namespace Bonmin
       }
     }
 
+   try {
     //Get the time and start.
     model_.initialSolve();
-    model_.solver()->resolve();
-    model_.resolve(NULL, 1);
+
+    // for Couenne
+    if (usingCouenne_)
+      model_.passInSolverCharacteristics (bonBabInfoPtr);
+
     continuousRelaxation_ =model_.solver()->getObjValue();
     if (specOpt==16)//Set warm start point for Ipopt
     {
@@ -456,7 +463,15 @@ namespace Bonmin
     // to get node parent info in Cbc, pass parameter 3.
     //model_.branchAndBound(3);
     model_.branchAndBound();
-    
+    }
+    catch(TNLPSolver::UnsolvedError *E){
+      s.nonlinearSolver()->model()->finalize_solution(TMINLP::MINLP_ERROR,
+           0,
+           NULL,
+           DBL_MAX);
+      throw E;
+   
+    }
     numNodes_ = model_.getNodeCount();
     bestObj_ = model_.getObjValue();
     bestBound_ = model_.getBestPossibleObjValue();
@@ -485,46 +500,42 @@ namespace Bonmin
       //CglStored * stored = dynamic_cast<CglStored*>(generator->generator());
        if (true&&!generator->numberCutsInTotal())
 	continue;
-      CoinMessageHandler * cbc_handler = model_.messageHandler();
-      int cbc_log_level = model_.logLevel();
-      FILE * fp = cbc_handler->filePointer();
-      if(cbc_log_level >= 1) {
-	fprintf(fp, "%s was tried %d times and created %d cuts of which %d were active after adding rounds of cuts",
-               generator->cutGeneratorName(),
-               generator->numberTimesEntered(),
-               generator->numberCutsInTotal()+
-               generator->numberColumnCuts(),
-               generator->numberCutsActive());
-        if (generator->timing()) {
-          fprintf(fp, " (%.3fs)\n",generator->timeInCutGenerator());
-        }
-        else {
-          fprintf(fp, "\n");
-        }
+       if(modelHandler_->logLevel() >= 1) {
+        *modelHandler_ << generator->cutGeneratorName()
+                << "was tried" << generator->numberTimesEntered()
+                << "times and created" << generator->numberCutsInTotal()+generator->numberColumnCuts()
+                << "cuts of which" << generator->numberCutsActive()
+                << "were active after adding rounds of cuts";
+         if (generator->timing()) {
+                char timebuf[20];
+                sprintf(timebuf, "(%.3fs)", generator->timeInCutGenerator());
+                *modelHandler_ << timebuf << CoinMessageEol;
+         }
+         else {
+                *modelHandler_ << CoinMessageEol;
+         }
       }
     }
 
     if (hasFailed) {
-      CoinMessageHandler * cbc_handler = model_.messageHandler();
-      FILE * fp = cbc_handler->filePointer();
-      fprintf(fp,
-     "************************************************************\n"
-     "WARNING : Optimization failed on an NLP during optimization\n"
-     "\n (no optimal value found within tolerances).\n"
-     "Optimization was not stopped because option \n"
-     "\"nlp_failure_behavior\" has been set to fathom but\n"
-     " beware that reported solution may not be optimal\n"
-     "************************************************************\n");
+        *model_.messageHandler()
+      << "************************************************************" << CoinMessageEol
+      << "WARNING : Optimization failed on an NLP during optimization"  << CoinMessageEol
+      << "  (no optimal value found within tolerances)."  << CoinMessageEol
+      << "  Optimization was not stopped because option"  << CoinMessageEol
+      << "\"nlp_failure_behavior\" has been set to fathom but"  << CoinMessageEol
+      << " beware that reported solution may not be optimal"  << CoinMessageEol
+      << "************************************************************" << CoinMessageEol;
     }
     TMINLP::SolverReturn status = TMINLP::MINLP_ERROR;
 
     if (model_.numberObjects()==0) {
       if (bestSolution_)
         delete [] bestSolution_;
-      bestSolution_ = new double[s.nonlinearSolver()->getNumCols()];
-      CoinCopyN(s.nonlinearSolver()->getColSolution(), s.nonlinearSolver()->getNumCols(),
-          bestSolution_);
-      bestObj_ = bestBound_ = s.nonlinearSolver()->getObjValue();
+      OsiSolverInterface * solver = 
+             (s.nonlinearSolver() == s.continuousSolver())? 
+             model_.solver() : s.nonlinearSolver();
+      bestObj_ = bestBound_ = solver->getObjValue();
     }
 
     if (bonBabInfoPtr->bestSolution2().size() > 0) {
@@ -545,6 +556,11 @@ namespace Bonmin
       CoinCopyN(model_.bestSolution(), s.nonlinearSolver()->getNumCols(), bestSolution_);
     }
     if (model_.status() == 0) {
+      if(model_.isContinuousUnbounded()){
+        status = TMINLP::CONTINUOUS_UNBOUNDED;
+        mipStatus_ = UnboundedOrInfeasible;
+      }
+      else
       if (bestSolution_) {
         status = TMINLP::SUCCESS;
         mipStatus_ = FeasibleOptimal;

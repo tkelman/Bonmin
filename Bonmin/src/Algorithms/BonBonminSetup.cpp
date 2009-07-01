@@ -149,14 +149,15 @@ namespace Bonmin
         "Cbc may decide to stop generating cuts, if not enough are generated at the root node, "
         "if k=-99 generate cuts only at the root node, if k=0 or 100 do not generate cuts.");
     roptions->setOptionExtraInfo("Gomory_cuts",5);
-    roptions->AddLowerBoundedIntegerOption("probing_cuts",
+#if 0
+    roptions->AddBoundedIntegerOption("probing_cuts",
         "Frequency (in terms of nodes) for generating probing cuts in branch-and-cut",
-        -100,-5,
+        0,0,0,
         "If k > 0, cuts are generated every k nodes, if -99 < k < 0 cuts are generated every -k nodes but "
         "Cbc may decide to stop generating cuts, if not enough are generated at the root node, "
         "if k=-99 generate cuts only at the root node, if k=0 or 100 do not generate cuts.");
     roptions->setOptionExtraInfo("probing_cuts",5);
-
+#endif 
     roptions->AddLowerBoundedIntegerOption("cover_cuts",
         "Frequency (in terms of nodes) for generating cover cuts in branch-and-cut",
         -100,-5,
@@ -224,6 +225,7 @@ namespace Bonmin
       cg.id = "Mixed Integer Gomory";
       cutGenerators_.push_back(cg);
     }
+#if 0
     options_->GetIntegerValue("probing_cuts",freq,"bonmin.");
     if (freq) {
       CuttingMethod cg;
@@ -246,6 +248,7 @@ namespace Bonmin
       cg.id = "Probing";
       cutGenerators_.push_back(cg);
     }
+#endif
     options_->GetIntegerValue("mir_cuts",freq,"bonmin.");
     if (freq) {
       CuttingMethod cg;
@@ -328,20 +331,28 @@ namespace Bonmin
     continuousSolver_->setAuxiliaryInfo(&extraStuff);
 
     intParam_[BabSetupBase::SpecialOption] = 16;
+#if 1
     if (!options_->GetIntegerValue("number_before_trust",intParam_[BabSetupBase::MinReliability],"bonmin.")) {
       intParam_[BabSetupBase::MinReliability] = 1;
-      options_->SetIntegerValue("number_before_trust",intParam_[BabSetupBase::MinReliability],"bonmin.");
+      options_->SetIntegerValue("bonmin.number_before_trust",intParam_[BabSetupBase::MinReliability], true, true);
     }
     if (!options_->GetIntegerValue("number_strong_branch",intParam_[BabSetupBase::NumberStrong],"bonmin.")) {
       intParam_[BabSetupBase::NumberStrong] = 1000;
-      options_->SetIntegerValue("number_strong_branch",intParam_[BabSetupBase::NumberStrong],"bonmin.");
+      options_->SetIntegerValue("bonmin.number_strong_branch",intParam_[BabSetupBase::NumberStrong], true, true);
     }
     int varSelection;
     bool val = options_->GetEnumValue("variable_selection",varSelection,"bonmin.");
+    // Set branching strategy
+    if (varSelection == MOST_FRACTIONAL) {
+      intParam_[NumberStrong] = 0;
+      intParam_[MinReliability] = 0;
+      options_->SetIntegerValue("bonmin.number_strong_branch",intParam_[BabSetupBase::NumberStrong],true, true);
+    }
     if (!val || varSelection == STRONG_BRANCHING || varSelection == RELIABILITY_BRANCHING ) {
-      options_->SetStringValue("variable_selection", "nlp-strong-branching","bonmin.");
+      options_->SetStringValue("bonmin.variable_selection", "nlp-strong-branching", true, true);
       varSelection = NLP_STRONG_BRANCHING;
     }
+#endif
 
     switch (varSelection) {
     case CURVATURE_ESTIMATOR:
@@ -433,19 +444,19 @@ namespace Bonmin
     }
     Algorithm algo = getAlgorithm();
     if (algo == B_OA) {
-      options_->SetNumericValue("oa_dec_time_limit",COIN_DBL_MAX, true, true);
-      options_->SetIntegerValue("nlp_solve_frequency", 0, true, true);
-      //intParam_[BabLogLevel] = 0;
+      options_->SetNumericValue("bonmin.oa_dec_time_limit",COIN_DBL_MAX, true, true);
+      options_->SetIntegerValue("bonmin.nlp_solve_frequency", 0, true, true);
+      intParam_[BabLogLevel] = 0;
     }
     else if (algo==B_QG) {
-      options_->SetNumericValue("oa_dec_time_limit",0, true, true);
-      options_->SetIntegerValue("nlp_solve_frequency", 0, true, true);
+      options_->SetNumericValue("bonmin.oa_dec_time_limit",0, true, true);
+      options_->SetIntegerValue("bonmin.nlp_solve_frequency", 0, true, true);
     }
     else if (algo==B_Ecp) {
-      options_->SetNumericValue("oa_dec_time_limit",0, true, true);
-      options_->SetIntegerValue("nlp_solve_frequency", 0, true, true);
-      options_->SetIntegerValue("filmint_ecp_cuts", 1, true, true);
-      options_->SetIntegerValue("number_cut_passes", 1, true, true);
+      options_->SetNumericValue("bonmin.oa_dec_time_limit",0, true, true);
+      options_->SetIntegerValue("bonmin.nlp_solve_frequency", 0, true, true);
+      options_->SetIntegerValue("bonmin.filmint_ecp_cuts", 1, true, true);
+      options_->SetIntegerValue("bonmin.number_cut_passes", 1, true, true);
     }
 //#define GREAT_STUFF_FOR_ANDREAS
 #ifdef GREAT_STUFF_FOR_ANDREAS
@@ -485,14 +496,14 @@ namespace Bonmin
       cutGenerators_.push_back(cg);
     }
 
-    if (algo!=B_QG)
+    if (algo == B_Hyb || algo == B_Ecp)
       addMilpCutGenerators();
 
     double oaTime;
     options_->GetNumericValue("oa_dec_time_limit",oaTime,"bonmin.");
     if (oaTime > 0.) {
       CuttingMethod cg;
-      cg.frequency = ival;
+      cg.frequency = -99;
       OACutGenerator2 * oa = new OACutGenerator2(*this);
       oa->passInMessageHandler(nonlinearSolver_->messageHandler());
       cg.cgl = oa;
@@ -517,7 +528,7 @@ namespace Bonmin
     oaHeu->setNlp(nonlinearSolver_);
     HeuristicMethod h;
     h.heuristic = oaHeu;
-    h.id = "noonlinear programm";
+    h.id = "nonlinear program";
     heuristics_.push_back(h);
   }
 

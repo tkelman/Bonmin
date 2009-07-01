@@ -12,7 +12,7 @@
 
 AC_PREREQ(2.59)
 
-AC_INIT([Bonmin],[0.99stable],[coin-bonmin@lists.coin-or.org])
+AC_INIT([Bonmin],[1.1stable],[coin-bonmin@lists.coin-or.org])
 
 AC_COPYRIGHT([
 Copyright 2006 International Business Machines and others.
@@ -48,6 +48,7 @@ AC_COIN_THIRDPARTY_SUBDIRS([HSL],[ThirdParty/HSL],[configure.ac])
 AC_COIN_THIRDPARTY_SUBDIRS([ASL],[ThirdParty/ASL],[solvers/asl.h])
 AC_COIN_THIRDPARTY_SUBDIRS([FilterSQP],[ThirdParty/FilterSQP],[source/src/filter.f])
 AC_COIN_THIRDPARTY_SUBDIRS([Mumps],[ThirdParty/Mumps],[MUMPS/src/dmumps_part1.F])
+AC_COIN_THIRDPARTY_SUBDIRS([Metis],[ThirdParty/Metis],[metis-4.0/Lib/balance.c])
 
 #############################################################################
 #                  Check which subprojects are there                        #
