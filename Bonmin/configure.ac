@@ -12,10 +12,10 @@
 
 AC_PREREQ(2.59)
 
-AC_INIT([Bonmin],[1.5],[bonmin@list.coin-or.org])
+AC_INIT([Bonmin],[trunk],[bonmin@list.coin-or.org])
 
 AC_COPYRIGHT([
-Copyright 2006, 2011 International Business Machines and others.
+Copyright 2006, 2008 International Business Machines and others.
 All Rights Reserved.
 This file is part of the open source package BONMIN which is distributed
 under the Common Public License.])
@@ -151,14 +151,6 @@ ASTYLEFLAGS="--mode=c --indent=spaces=2 --indent-cases --indent-namespaces --min
 AC_SUBST(ASTYLEFLAGS)
 
 #############################################################################
-#                                System header                              #
-#############################################################################
-
-AC_COIN_CHECK_CXX_CHEADER(math)
-AC_COIN_CHECK_CXX_CHEADER(float)
-AC_COIN_CHECK_CXX_CHEADER(ieeefp)
-
-#############################################################################
 #                            Stuff for Examples                             #
 #############################################################################
 
@@ -197,6 +189,6 @@ if test $coin_has_asl = yes ; then
                   ])
 fi
 
-AC_CONFIG_HEADER([inc/config_bonmin.h])
+AC_CONFIG_HEADER([src/Interfaces/config.h src/Interfaces/config_bonmin.h])
 
 AC_COIN_FINALIZE

@@ -260,23 +260,31 @@ namespace Bonmin
         "Cbc may decide to stop generating cuts, if not enough are generated at the root node, "
         "if k=-99 generate cuts only at the root node, if k=0 or 100 do not generate cuts.");
     roptions->setOptionExtraInfo("clique_cuts", 119);
+
   }
+
+
   /** Add milp cut generators according to options.*/
   void
   BonminSetup::addMilpCutGenerators()
   {
+
     int freq;
+
     options_->GetIntegerValue("Gomory_cuts", freq,prefix_.c_str());
+
     if (freq) {
       CuttingMethod cg;
       cg.frequency = freq;
       CglGomory * gom = new CglGomory;
       cg.cgl = gom;
-      gom->setLimitAtRoot(512);
-      gom->setLimit(50);
+      gom->setLimitAtRoot(5000);
+      gom->setLimit(500);
+      gom->setLargestFactorMultiplier(1e-08);
       cg.id = "Mixed Integer Gomory";
       cutGenerators_.push_back(cg);
     }
+
 #if 0
     options_->GetIntegerValue("probing_cuts",freq,prefix_.c_str());
     if (freq) {
@@ -301,18 +309,21 @@ namespace Bonmin
       cutGenerators_.push_back(cg);
     }
 #endif
+
     options_->GetIntegerValue("mir_cuts",freq,prefix_.c_str());
+
     if (freq) {
       CuttingMethod cg;
       cg.frequency = freq;
       CglMixedIntegerRounding2 * mir = new CglMixedIntegerRounding2;
+      //CglMixedIntegerRounding2 * mir = new CglMixedIntegerRounding2(1, true, 1);
       cg.cgl = mir;
       cg.id = "Mixed Integer Rounding";
       cutGenerators_.push_back(cg);
-
-
     }
+
     options_->GetIntegerValue("2mir_cuts",freq,prefix_.c_str());
+
     if (freq) {
       CuttingMethod cg;
       cg.frequency = freq;
@@ -321,7 +332,9 @@ namespace Bonmin
       cg.id = "2-MIR";
       cutGenerators_.push_back(cg);
     }
+
     options_->GetIntegerValue("cover_cuts",freq,prefix_.c_str());
+
     if (freq) {
       CuttingMethod cg;
       cg.frequency = freq;
@@ -332,6 +345,7 @@ namespace Bonmin
     }
 
     options_->GetIntegerValue("clique_cuts",freq,prefix_.c_str());
+
     if (freq) {
       CuttingMethod cg;
       cg.frequency = freq;
@@ -344,7 +358,9 @@ namespace Bonmin
       cg.id = "Clique";
       cutGenerators_.push_back(cg);
     }
+
     options_->GetIntegerValue("flow_cover_cuts",freq,prefix_.c_str());
+
     if (freq) {
       CuttingMethod cg;
       cg.frequency = freq;
@@ -353,7 +369,9 @@ namespace Bonmin
       cg.id = "Flow Covers";
       cutGenerators_.push_back(cg);
     }
+
     options_->GetIntegerValue("lift_and_project_cuts",freq,prefix_.c_str());
+
     if (freq) {
       CuttingMethod cg;
       cg.frequency = freq;
@@ -362,7 +380,9 @@ namespace Bonmin
       cg.id = "Lift-and-Project";
       cutGenerators_.push_back(cg);
     }
+
     options_->GetIntegerValue("reduce_and_split_cuts",freq,prefix_.c_str());
+
     if (freq) {
       CuttingMethod cg;
       cg.frequency = freq;
@@ -411,7 +431,7 @@ namespace Bonmin
         continuousSolver_->findIntegersAndSOS(false);
         setPriorities();
         addSos();
-        SmartPtr<StrongBranchingSolver> strong_solver = NULL;
+        Ipopt::SmartPtr<StrongBranchingSolver> strong_solver = NULL;
         BonChooseVariable * chooseVariable = new BonChooseVariable(*this, nonlinearSolver_);
         chooseVariable->passInMessageHandler(nonlinearSolver_->messageHandler());
         switch (varSelection) {
@@ -476,7 +496,7 @@ namespace Bonmin
     }
 
 
-    Index doHeuristicDiveFractional = false;
+    Ipopt::Index doHeuristicDiveFractional = false;
     options()->GetEnumValue("heuristic_dive_fractional",doHeuristicDiveFractional,prefix_.c_str());
     if(doHeuristicDiveFractional){
       HeuristicDiveFractional* dive_fractional = new HeuristicDiveFractional(this);
@@ -486,7 +506,7 @@ namespace Bonmin
       heuristics_.push_back(h);
     }
 
-    Index doHeuristicDiveVectorLength = false;
+    Ipopt::Index doHeuristicDiveVectorLength = false;
     options()->GetEnumValue("heuristic_dive_vectorLength",doHeuristicDiveVectorLength,prefix_.c_str());
     if(doHeuristicDiveVectorLength){
       HeuristicDiveVectorLength* dive_vectorLength = new HeuristicDiveVectorLength(this);
@@ -496,7 +516,7 @@ namespace Bonmin
       heuristics_.push_back(h);
     }
 
-    Index doHeuristicDiveMIPFractional = false;
+    Ipopt::Index doHeuristicDiveMIPFractional = false;
     if(!options()->GetEnumValue("heuristic_dive_MIP_fractional",doHeuristicDiveMIPFractional,prefix_.c_str())){
       doHeuristicDiveMIPFractional = true;
       std::string o_name = prefix_ + "heuristic_dive_MIP_fractional";
@@ -510,7 +530,7 @@ namespace Bonmin
       heuristics_.push_back(h);
     }
 
-    Index doHeuristicDiveMIPVectorLength = false;
+    Ipopt::Index doHeuristicDiveMIPVectorLength = false;
     options()->GetEnumValue("heuristic_dive_MIP_vectorLength",doHeuristicDiveMIPVectorLength,prefix_.c_str());
     if(doHeuristicDiveMIPVectorLength){
       HeuristicDiveMIPVectorLength* dive_MIP_vectorLength = new HeuristicDiveMIPVectorLength(this);
@@ -519,7 +539,7 @@ namespace Bonmin
       h.id = "DiveMIPVectorLength";
       heuristics_.push_back(h);
     }
-    Index doHeuristicFPump = false;
+    Ipopt::Index doHeuristicFPump = false;
     if(!nonlinearSolver_->model()->hasGeneralInteger() && !options()->GetEnumValue("heuristic_feasibility_pump",doHeuristicFPump,prefix_.c_str())){
       doHeuristicFPump = true;
       std::string o_name = prefix_ + "heuristic_feasibility_pump";
@@ -533,7 +553,7 @@ namespace Bonmin
       heuristics_.push_back(h);
     }
 
-    Index doFixAndSolve = false;
+    Ipopt::Index doFixAndSolve = false;
     options()->GetEnumValue("fix_and_solve_heuristic",doFixAndSolve,prefix_.c_str());
     if(doFixAndSolve){
       FixAndSolveHeuristic* fix_and_solve = new FixAndSolveHeuristic(this);
@@ -543,7 +563,7 @@ namespace Bonmin
       heuristics_.push_back(h);
     }
 
-    Index doDummyPump = false;
+    Ipopt::Index doDummyPump = false;
     options()->GetEnumValue("dummy_pump_heuristic",doDummyPump,prefix_.c_str());
     if(doDummyPump){
       DummyPump* fix_and_solve = new DummyPump(this);
@@ -553,7 +573,7 @@ namespace Bonmin
       heuristics_.push_back(h);
     }
 
-    Index doHeuristicRINS = false;
+    Ipopt::Index doHeuristicRINS = false;
     options()->GetEnumValue("heuristic_RINS",doHeuristicRINS,prefix_.c_str());
     if(doHeuristicRINS){
       HeuristicRINS* rins = new HeuristicRINS(this);
@@ -563,7 +583,7 @@ namespace Bonmin
       heuristics_.push_back(h);
     }
 
-    Index doHeuristicLocalBranching = false;
+    Ipopt::Index doHeuristicLocalBranching = false;
     options()->GetEnumValue("heuristic_local_branching",doHeuristicLocalBranching,prefix_.c_str());
     if(doHeuristicLocalBranching){
       HeuristicLocalBranching* local_branching = new HeuristicLocalBranching(this);
@@ -573,7 +593,7 @@ namespace Bonmin
       heuristics_.push_back(h);
     }
 
-    Index doHeuristicPumpForMinlp = false;
+    Ipopt::Index doHeuristicPumpForMinlp = false;
     options()->GetEnumValue("pump_for_minlp",doHeuristicPumpForMinlp,prefix_.c_str());
     if(doHeuristicPumpForMinlp){
       PumpForMinlp * pump = new PumpForMinlp(this);
@@ -583,7 +603,7 @@ namespace Bonmin
       heuristics_.push_back(h);
     }
 
-    Index doHeuristicMilpRounding = false;
+    Ipopt::Index doHeuristicMilpRounding = false;
     options()->GetEnumValue("MILP_rounding_heuristic",doHeuristicMilpRounding,prefix_.c_str());
     if(doHeuristicMilpRounding){
       MilpRounding * round = new MilpRounding(this);
@@ -598,6 +618,7 @@ namespace Bonmin
   void
   BonminSetup::initializeBHyb(bool createContinuousSolver /*= false*/)
   {
+    double setup_time = -CoinCpuTime();
     if (createContinuousSolver) {
       /* Create linear solver */
       continuousSolver_ = new OsiClpSolverInterface;
@@ -773,7 +794,7 @@ namespace Bonmin
     h.id = "nonlinear programm";
     heuristics_.push_back(h);
 
-    Index doHeuristicRINS = false;
+    Ipopt::Index doHeuristicRINS = false;
     options()->GetEnumValue("heuristic_RINS",doHeuristicRINS,prefix_.c_str());
     if(doHeuristicRINS){
       HeuristicRINS* rins = new HeuristicRINS(this);
@@ -783,7 +804,7 @@ namespace Bonmin
       heuristics_.push_back(h);
     }
 
-    Index doHeuristicLocalBranching = false;
+    Ipopt::Index doHeuristicLocalBranching = false;
     options()->GetEnumValue("heuristic_local_branching",doHeuristicLocalBranching,prefix_.c_str());
     if(doHeuristicLocalBranching){
       HeuristicLocalBranching* local_branching = new HeuristicLocalBranching(this);
@@ -793,7 +814,7 @@ namespace Bonmin
       heuristics_.push_back(h);
     }
 
-    Index doHeuristicFPump = false;
+    Ipopt::Index doHeuristicFPump = false;
     options()->GetEnumValue("heuristic_feasibility_pump",doHeuristicFPump,prefix_.c_str());
     if(doHeuristicFPump){
       HeuristicFPump* feasibility_pump = new HeuristicFPump(this);
@@ -803,7 +824,7 @@ namespace Bonmin
       heuristics_.push_back(h);
     }
 
-    Index doHeuristicDiveFractional = false;
+    Ipopt::Index doHeuristicDiveFractional = false;
     options()->GetEnumValue("heuristic_dive_fractional",doHeuristicDiveFractional,prefix_.c_str());
     if(doHeuristicDiveFractional){
       HeuristicDiveFractional* dive_fractional = new HeuristicDiveFractional(this);
@@ -813,7 +834,7 @@ namespace Bonmin
       heuristics_.push_back(h);
     }
 
-    Index doHeuristicDiveVectorLength = false;
+    Ipopt::Index doHeuristicDiveVectorLength = false;
     options()->GetEnumValue("heuristic_dive_vectorLength",doHeuristicDiveVectorLength,prefix_.c_str());
     if(doHeuristicDiveVectorLength){
       HeuristicDiveVectorLength* dive_vectorLength = new HeuristicDiveVectorLength(this);
@@ -823,7 +844,7 @@ namespace Bonmin
       heuristics_.push_back(h);
     }
 
-    Index doHeuristicDiveMIPFractional = false;
+    Ipopt::Index doHeuristicDiveMIPFractional = false;
     options()->GetEnumValue("heuristic_dive_MIP_fractional",doHeuristicDiveMIPFractional,prefix_.c_str());
     if(doHeuristicDiveMIPFractional){
       HeuristicDiveMIPFractional* dive_MIP_fractional = new HeuristicDiveMIPFractional(this);
@@ -833,7 +854,7 @@ namespace Bonmin
       heuristics_.push_back(h);
     }
 
-    Index doHeuristicDiveMIPVectorLength = false;
+    Ipopt::Index doHeuristicDiveMIPVectorLength = false;
     options()->GetEnumValue("heuristic_dive_MIP_vectorLength",doHeuristicDiveMIPVectorLength,prefix_.c_str());
     if(doHeuristicDiveMIPVectorLength){
       HeuristicDiveMIPVectorLength* dive_MIP_vectorLength = new HeuristicDiveMIPVectorLength(this);
@@ -852,8 +873,8 @@ namespace Bonmin
       heuristics_.push_back(h);
     }
 #endif
-      
-
+    setup_time += CoinCpuTime();
+    doubleParam_[MaxTime] -= setup_time;
   }
 
 

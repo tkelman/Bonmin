@@ -104,6 +104,8 @@ namespace Bonmin
   void
   Bab::branchAndBound(BabSetupBase & s)
   {
+
+    double remaining_time = s.getDoubleParameter(BabSetupBase::MaxTime) + CoinCpuTime();
     /* Put a link to this into solver.*/
     OsiBabSolver *  babInfo = dynamic_cast<OsiBabSolver *>(s.continuousSolver()->getAuxiliaryInfo());
     assert(babInfo);
@@ -531,7 +533,10 @@ namespace Bonmin
 
     // to get node parent info in Cbc, pass parameter 3.
     //model_.branchAndBound(3);
-    model_.branchAndBound();
+    remaining_time -= CoinCpuTime();
+    model_.setDblParam(CbcModel::CbcMaximumSeconds, remaining_time);
+    if(remaining_time > 0.)
+      model_.branchAndBound();
     }
     catch(TNLPSolver::UnsolvedError *E){
       s.nonlinearSolver()->model()->finalize_solution(TMINLP::MINLP_ERROR,
@@ -627,7 +632,13 @@ namespace Bonmin
       bestSolution_ = new double[s.nonlinearSolver()->getNumCols()];
       CoinCopyN(model_.bestSolution(), s.nonlinearSolver()->getNumCols(), bestSolution_);
     }
-    if (model_.status() == 0) {
+    if(remaining_time <= 0.){
+      status = TMINLP::LIMIT_EXCEEDED;
+      if (bestSolution_) {
+        mipStatus_ = Feasible;
+      }
+    }
+    else if (model_.status() == 0) {
       if(model_.isContinuousUnbounded()){
         status = TMINLP::CONTINUOUS_UNBOUNDED;
         mipStatus_ = UnboundedOrInfeasible;

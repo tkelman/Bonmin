@@ -81,7 +81,7 @@ namespace Bonmin
   Ipopt::SmartPtr<TNLPSolver>
   IpoptSolver::clone()
   {
-    SmartPtr<IpoptSolver> retval = new IpoptSolver(*this);
+    Ipopt::SmartPtr<IpoptSolver> retval = new IpoptSolver(*this);
     retval->app_->Initialize("");
     retval->default_log_level_ = default_log_level_;
     return GetRawPtr(retval);
@@ -217,7 +217,7 @@ namespace Bonmin
         return stats->TotalCpuTime();
       }
       else {
-        printf("TODO: No statistics available from Ipopt in Bonmin::IpoptSolver::CPUTime\n");
+        app_->Jnlst()->Printf(Ipopt::J_WARNING, Ipopt::J_STATISTICS, "TODO: No statistics available from Ipopt in Bonmin::IpoptSolver::CPUTime\n");
         return 0.;
         //throw CoinError("No statistics available from Ipopt","CPUTime","Bonmin::IpoptSolver");
       }
@@ -237,7 +237,7 @@ namespace Bonmin
         return stats->IterationCount();
       }
       else {
-        printf("TODO: No statistics available from Ipopt in Bonmin::IpoptSolver::IterationCount\n");
+        app_->Jnlst()->Printf(Ipopt::J_WARNING, Ipopt::J_STATISTICS, "TODO: No statistics available from Ipopt in Bonmin::IpoptSolver::IterationCount\n");
         return 0;
         //throw CoinError("No statistics available from Ipopt","IterationCount","Bonmin::IpoptSolver");
       }
@@ -326,6 +326,8 @@ namespace Bonmin
 CoinWarmStart *
 IpoptSolver::getUsedWarmStart(Ipopt::SmartPtr<TMINLP2TNLP> tnlp) const
 {
+  if(tnlp->x_init() == NULL || tnlp->duals_init() == NULL)
+    return NULL;
   return  new IpoptWarmStart(tnlp->num_variables(),
                              2*tnlp->num_variables() + 
                              tnlp->num_constraints(),
@@ -351,6 +353,7 @@ IpoptSolver::getUsedWarmStart(Ipopt::SmartPtr<TMINLP2TNLP> tnlp) const
     if (!warmstart && warmStartStrategy_)
       return 0;
     const IpoptWarmStart * ws = dynamic_cast<const IpoptWarmStart*> (warmstart);
+    if(ws == NULL) return 0;
     if (ws->empty())//reset initial point and leave
     {
       disableWarmStart();
