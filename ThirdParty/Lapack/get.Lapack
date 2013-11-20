@@ -1,0 +1,76 @@
+#!/bin/sh
+
+set -e
+
+lapack_ver=3.4.2
+
+wgetcmd="wget"
+wgetcount=`which wget 2>/dev/null | wc -l`
+if test ! $wgetcount = 1; then
+  echo "Utility wget not found in your PATH."
+  if test `uname` = Darwin; then
+    wgetcmd="curl -L -k -O"
+    echo "Using ftp command instead."
+  elif test `uname` = FreeBSD; then
+    wgetcmd=fetch
+    echo "Using fetch command instead."
+  else
+    exit -1
+  fi
+fi
+
+echo " "
+echo "Running script for downloading the source code for LAPACK"
+echo " "
+
+rm -f lapack-${lapack_ver}.tgz
+
+echo "Downloading the source code from projects.coin-or.org..."
+if ! $wgetcmd https://projects.coin-or.org/svn/BuildTools/ThirdParty/Lapack/src/lapack-${lapack_ver}.tgz ;
+then
+  echo
+  echo "Failed, try downloading the source code from www.netlib.org..."
+  if ! $wgetcmd http://www.netlib.org/lapack/lapack-${lapack_ver}.tgz ;
+  then
+    echo
+    echo "Failed, try downloading the source code from netlib.sandia.gov..."
+    if ! $wgetcmd http://netlib.sandia.gov/lapack/lapack-${lapack_ver}.tgz
+    then
+      if test "$wgetcmd" = wget ;
+      then
+        echo -n "Failed, try downloading from https://projects.coin-or.org without certificate check? (y/n) "
+        if test "$1" = "-y" ;
+        then
+          doit=y
+          echo y
+        else
+          read doit
+          echo
+        fi
+        if test "$doit" = y ;
+        then
+          $wgetcmd --no-check-certificate https://projects.coin-or.org/svn/BuildTools/ThirdParty/Lapack/src/lapack-${lapack_ver}.tgz
+        else
+          exit 1;
+        fi
+      else
+        exit 1;
+      fi
+    fi
+  fi
+fi
+
+echo "Uncompressing the tarball..."
+gunzip -f lapack-${lapack_ver}.tgz
+
+echo "Unpacking the source code..."
+tar xf lapack-${lapack_ver}.tar lapack-${lapack_ver}/SRC lapack-${lapack_ver}/INSTALL/dlamch.f lapack-${lapack_ver}/INSTALL/slamch.f
+rm -rf LAPACK
+mv lapack-${lapack_ver} LAPACK
+
+echo "Deleting the tar file..."
+rm lapack-${lapack_ver}.tar
+
+echo " "
+echo "Done downloading the source code for LAPACK."
+echo " "
